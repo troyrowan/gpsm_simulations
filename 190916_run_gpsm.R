@@ -43,7 +43,6 @@ write_delim(annotation_file,
 pheno_pop = gv_pop = rand_pop = newPop(founderPop) #initializes the same base population allows us to select these in parallel
 
 pops = data.frame(gen = as.numeric(),
-                  run = as.numeric(),
                   pheno_g = as.numeric(),
                   pheno_vg = as.numeric(),
                   gv_g = as.numeric(),
@@ -210,8 +209,8 @@ rep(1:(generation-burnins), each=crosses/pulleach) %>%
 
 plot_grid(
   pops %>%
-    select(gen, run, pheno_g, gv_g, rand_g) %>%
-    melt(id = c("gen", "run")) %>%
+    select(gen, pheno_g, gv_g, rand_g) %>%
+    melt(id = c("gen")) %>%
     ggplot(aes(gen, value, color = variable))+
     geom_point(alpha = 0.3)+
     geom_smooth(size = 1.5)+
@@ -220,8 +219,8 @@ plot_grid(
   #facet_grid(~burnin, scales = "free_x")
 
   pops %>%
-    select(gen, run, pheno_vg, gv_vg, rand_vg) %>%
-    melt(id = c("gen", "run")) %>%
+    select(gen, pheno_vg, gv_vg, rand_vg) %>%
+    melt(id = c("gen")) %>%
     ggplot(aes(gen, value, color = variable))+
     geom_point(alpha = 0.3)+
     geom_smooth(size = 1.5)+
