@@ -1,12 +1,17 @@
 source("plotting_functions.R")
 library(ggplot2)
 library(stringr)
-#Arg 1 = Scenario row_number
+library(readr)
+library(dplyr)
+library(tidyr)
+library(cowplot)
+library(qvalue)
+library(viridis)
+#Arg 1 = Scenario name
 #Arg 2 = Selected population
-#Arg 3 = Replicate
 
 
-args <- commandArgs(TRUE)
+arg <- commandArgs(TRUE)
 
 choose_name <- function(xx){
 	if (xx == "gv_pop"){
@@ -22,15 +27,17 @@ return(selection)
 }
 
 scenario_number = str_replace(arg[1], "scenario", "")
-selection_type = choose_name(args[2])
-replicate = paste0("replicate", arg[3])
+selection_type = choose_name(arg[2])
 
-true_qtl = read_csv(paste0("generation_genotypes/", arg[1], "/", arg[1], ".true_qtl.csv"))
-gpsm = readgwas(paste0("gpsm_runs/", arg[1], "/", arg[1], ".", arg[2], ".", replicate, ".gpsm.assoc.txt"))
+true_qtl = read_csv(paste0("generation_genotypes/", arg[1], "/", arg[1], ".true_qtl.csv"), col_types = cols(rs = col_character()))
+gpsm = readgwas(paste0("gpsm_runs/", arg[1], "/", arg[1], ".", arg[2], ".gpsm.assoc.txt")) %>% mutate(rs = paste(chr, pos, sep = ":"))
+
+print(filter(gpsm, q < 0.1)$rs)
+print(true_qtl$rs)
 
 ggqq(gpsm$p_score)+
 	ggtitle(paste("Scenario", scenario_number , selection_type))
-ggsave(paste0("gpsm_runs/", arg[1], "/figures/", arg[1], ".", replicate, ".gpsm.qq.png"),
+ggsave(paste0("gpsm_runs/", arg[1], "/figures/", arg[1], ".", arg[2], ".gpsm.qq.png"),
 width = 8,
 height = 8)
 
@@ -40,6 +47,6 @@ ggmanhattan(gpsm,
 						value = q,
 						sigsnps = true_qtl$rs)+
 							ggtitle(paste("Scenario", scenario_number , selection_type))
-ggsave(paste0("gpsm_runs/", arg[1], "/figures/", arg[1], ".", replicate, ".gpsm.manhattan.png"),
+ggsave(paste0("gpsm_runs/", arg[1], "/figures/", arg[1], ".", arg[2], ".gpsm.manhattan.png"),
 width = 11,
 height = 8)
