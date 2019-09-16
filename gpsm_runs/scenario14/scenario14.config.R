@@ -1,0 +1,14 @@
+nqtl = 10
+nsnps = 1000
+h2 = 0.5
+chrom = 10
+testname = "scenario14"
+females = 500
+males = 50
+crosses = 2000
+gamma = TRUE
+shape = 0.42
+pulleach = 5
+burnins = 5
+gens = 25
+analyses = c("gv", "pheno", "rand")

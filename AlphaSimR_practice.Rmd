@@ -1,0 +1,628 @@
+---
+title: "GPSM_Trial_Simulations"
+author: "Troy Rowan"
+date: "8/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(AlphaSimR)
+library(tidyverse)
+library(cowplot)
+library(reshape2)
+library(qvalue)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#AlphaSimR introduction
+Basic intro examples of how AlphaSimR works. Using vignette from https://cran.r-project.org/web/packages/AlphaSimR/vignettes/intro.html as a starting point.
+
+I've adapted code a bit so that I can work from dataframes instead of individually saved vectors, etc.
+###Creating Founder population and specifying parameters
+* Initial founder population: Cattle
+    + Base population has 1000 individuals with 10 chromosomes and 1000 segregating sites
+    + 
+```{r}
+#Creating Founder Haplotypes
+# founderPop = runMacs(nInd=2000,
+#                      nChr=10,
+#                      segSites=5000,
+#                      species = "CATTLE")
+
+#Creating Founder Haplotypes: Simplified and idealized (GPSM should work here)
+# founderPop = runMacs(nInd=2000,
+#                      nChr=10,
+#                      segSites=1000,
+#                      species = "CATTLE")
+
+# SP = SimParam$new(founderPop)
+# SP$addTraitA(nQtlPerChr=100, gamma = TRUE)
+# SP$setGender("yes_sys")
+# SP$addSnpChip(nSnpPerChr = 1000)
+# SP$setVarE(h2 = 0.5)
+
+# Setting Simulation Parameters
+SP = SimParam$new(founderPop)
+SP$addTraitA(nQtlPerChr=100) 
+SP$setGender("yes_sys")
+SP$addSnpChip(nSnpPerChr = 500)
+SP$setVarE(h2 = 0.4)
+```
+
+###Burn in simulations to test Bulmer Effects
+```{r}
+pheno_pop = gv_pop = rand_pop = newPop(founderPop) #initializes the same base population allows us to select these in parallel
+# pops = data.frame(gen = 0,
+#                   run = 1,
+#                   pheno_g = meanG(pheno_pop),
+#                   pheno_vg = varG(pheno_pop),
+#                   gv_g = meanG(gv_pop),
+#                   gv_vg = varG(gv_pop),
+#                   rand_g = meanG(rand_pop),
+#                   rand_vg = varG(rand_pop))
+
+pops = data.frame(gen = as.numeric(),
+                  run = as.numeric(),
+                  pheno_g = as.numeric(),
+                  pheno_vg = as.numeric(),
+                  gv_g = as.numeric(),
+                  gv_vg = as.numeric(),
+                  rand_g = as.numeric(),
+                  rand_vg = as.numeric())
+gens = 100
+for(run in 0:7){
+  
+  pheno_pop = newPop(founderPop)
+  gv_pop = newPop(founderPop)
+  rand_pop = newPop(founderPop)
+
+  for(generation in 0:gens){
+    pops[gens*run + generation + 1, "gen"] = generation 
+    pops[gens*run + generation + 1, "run"] = run + 1
+    
+    if (generation == 0){
+      pops[gens*run + generation + 1, "pheno_g"] = meanG(newPop(founderPop)) 
+      pops[gens*run + generation + 1, "pheno_vg"] = varG(newPop(founderPop))
+      pops[gens*run + generation + 1, "gv_g"] = meanG(newPop(founderPop)) 
+      pops[gens*run + generation + 1, "gv_vg"] = varG(newPop(founderPop))
+      pops[gens*run + generation + 1, "rand_g"] = meanG(newPop(founderPop)) 
+      pops[gens*run + generation + 1, "rand_vg"] = varG(newPop(founderPop))
+    }
+    
+    if (generation != 0){
+    pheno_pop = selectCross(pop=pheno_pop,
+                            nFemale=500,
+                            nMale=50,
+                            use="pheno",
+                            nCrosses=1000) #specify selection intensity, selection criteria, number of offspring
+    pops[gens*run + generation + 1, "pheno_g"] = meanG(pheno_pop) #Updates genetic values in dataframe
+    pops[gens*run + generation + 1, "pheno_vg"] = varG(pheno_pop) #Updates genetic values in dataframe
+    
+    
+    gv_pop = selectCross(pop=gv_pop, #Sets genomic EBV via RRBLUP for selection
+                          nFemale=500,
+                          nMale=50,
+                          use="gv",
+                          nCrosses=1000)
+    pops[gens*run + generation + 1, "gv_g"] = meanG(gv_pop)
+    pops[gens*run + generation + 1, "gv_vg"] = varG(gv_pop)
+  
+    rand_pop = selectCross(pop=rand_pop,
+                           nFemale=500,
+                           nMale=50,
+                           use="rand",
+                           nCrosses=1000)
+    pops[gens*run + generation + 1, "rand_g"] = meanG(rand_pop)
+    pops[gens*run + generation + 1, "rand_vg"] = varG(rand_pop)
+    }
+  }
+}
+#colnames(pops)
+
+
+pops %>% 
+  select(gen, run, pheno_g, gv_g, rand_g) %>% 
+  melt(id = c("gen", "run")) %>% 
+  ggplot(aes(gen, value, color = variable))+
+    geom_point(alpha = 0.1)+
+  geom_smooth()+
+  scale_color_viridis_d(end = 0.75,name = "Selection Method", labels = c("Phenotype", "True BV", "Random Mating"))+
+  labs(y = "Mean G", x = "Generation", main = "Genetic Gain")
+
+pops %>% 
+  select(gen, run, pheno_vg, gv_vg, rand_vg) %>% 
+  melt(id = c("gen", "run")) %>% 
+  ggplot(aes(gen, value, color = variable))+
+    geom_point(alpha = 0.1)+
+  geom_smooth()+
+  labs(y = "Var G", x = "Generation", main = "Genetic Variance")+
+  scale_color_viridis_d(end = 0.75, name = "Selection Method", labels = c("Phenotype", "True BV", "Random Mating"))
+```
+
+
+
+
+
+
+###Simulating GPSM
+```{r}
+#Idealized parameters for detecting selection
+nqtl = 100
+nsnps = 1000
+h2 = 0.5
+chrom = 10
+testname = "scenario12"
+females = 500
+males = 50
+crosses = 2000
+gamma = FALSE
+shape = NULL
+pulleach = 5
+burnins = 5
+gens = 20
+analyses = c("gv", "pheno", "rand")
+
+
+SP = SimParam$new(founderPop)
+SP$addTraitA(nQtlPerChr=nqtl, gamma = gamma, shape = shape) 
+SP$setGender("yes_sys")
+SP$addSnpChip(nSnpPerChr = nsnps)
+SP$setVarE(h2 = h2)
+
+trait = data.frame(chr = rep(1:chrom, each = nqtl), 
+                   pos = SP$traits[[1]]@lociLoc,
+                   effect = SP$traits[[1]]@addEff,
+                   rs = paste(rep(1:chrom, each = nqtl), SP$traits[[1]]@lociLoc, sep = ":"))
+write_csv(trait, paste0("generation_genotypes/", testname, "/", testname, ".true_qtl.csv"))
+
+annotation_file = data.frame(rs = paste0("SNP_", 1:(nsnps*chrom)),
+                             pos = SP$snpChips[[1]]@lociLoc,
+                             chr = rep(1:chrom, each = nsnps))
+
+write_delim(annotation_file, 
+            paste0("generation_genotypes/", testname, "/", testname, ".snp.annotation.txt"), 
+            delim = ",", 
+            col_names = FALSE)
+
+pheno_pop = gv_pop = rand_pop = newPop(founderPop) #initializes the same base population allows us to select these in parallel
+
+pops = data.frame(gen = as.numeric(),
+                  run = as.numeric(),
+                  pheno_g = as.numeric(),
+                  pheno_vg = as.numeric(),
+                  gv_g = as.numeric(),
+                  gv_vg = as.numeric(),
+                  rand_g = as.numeric(),
+                  rand_vg = as.numeric())
+
+gv_geno = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(gv_geno)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
+rand_geno = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(gv_geno)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
+pheno_geno = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(pheno_geno)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
+
+for(run in 0:0){
+  pheno_pop = newPop(founderPop)
+  gv_pop = newPop(founderPop)
+  rand_pop = newPop(founderPop)
+  
+
+  for(generation in 0:gens){
+    pops[gens*run + generation + 1, "gen"] = generation 
+    pops[gens*run + generation + 1, "run"] = run + 1
+    
+    if (generation == 0){
+      pops[gens*run + generation + 1, "pheno_g"] = meanG(newPop(founderPop)) 
+      pops[gens*run + generation + 1, "pheno_vg"] = varG(newPop(founderPop))
+      pops[gens*run + generation + 1, "gv_g"] = meanG(newPop(founderPop)) 
+      pops[gens*run + generation + 1, "gv_vg"] = varG(newPop(founderPop))
+      pops[gens*run + generation + 1, "rand_g"] = meanG(newPop(founderPop)) 
+      pops[gens*run + generation + 1, "rand_vg"] = varG(newPop(founderPop))
+    }
+    
+    if (generation > 0 & generation <= burnins){
+          pheno_pop = selectCross(pop=pheno_pop,
+                            nFemale=females,
+                            nMale=males,
+                            use="pheno",
+                            nCrosses=crosses) #specify selection intensity, selection criteria, number of offspring
+    pops[gens*run + generation + 1, "pheno_g"] = meanG(pheno_pop) #Updates genetic values in dataframe
+    pops[gens*run + generation + 1, "pheno_vg"] = varG(pheno_pop) #Updates genetic values in dataframe
+    
+          gv_pop = selectCross(pop=gv_pop,
+                            nFemale=females,
+                            nMale=males,
+                            use="pheno",
+                            nCrosses=crosses)    
+    pops[gens*run + generation + 1, "gv_g"] = meanG(gv_pop) #Updates genetic values in dataframe
+    pops[gens*run + generation + 1, "gv_vg"] = varG(gv_pop) #Updates genetic values in dataframe
+    
+          rand_pop = selectCross(pop=rand_pop,
+                            nFemale=females,
+                            nMale=males,
+                            use="pheno",
+                            nCrosses=crosses)    
+    pops[gens*run + generation + 1, "rand_g"] = meanG(rand_pop) #Updates genetic values in dataframe
+    pops[gens*run + generation + 1, "rand_vg"] = varG(rand_pop) #Updates genetic values in dataframe
+    }
+    
+    if (generation > burnins){
+    pheno_pop = selectCross(pop=pheno_pop,
+                            nFemale=females,
+                            nMale=males,
+                            use="pheno",
+                            nCrosses=crosses) #specify selection intensity, selection criteria, number of offspring
+    pops[gens*run + generation + 1, "pheno_g"] = meanG(pheno_pop) #Updates genetic values in dataframe
+    pops[gens*run + generation + 1, "pheno_vg"] = varG(pheno_pop) #Updates genetic values in dataframe
+    
+    
+    gv_pop = selectCross(pop=gv_pop, #Sets genomic EBV via RRBLUP for selection
+                          nFemale=females,
+                          nMale=males,
+                          use="gv",
+                          nCrosses=crosses)
+    pops[gens*run + generation + 1, "gv_g"] = meanG(gv_pop)
+    pops[gens*run + generation + 1, "gv_vg"] = varG(gv_pop)
+  
+    rand_pop = selectCross(pop=rand_pop,
+                           nFemale=females,
+                           nMale=males,
+                           use="rand",
+                           nCrosses=crosses)
+    pops[gens*run + generation + 1, "rand_g"] = meanG(rand_pop)
+    pops[gens*run + generation + 1, "rand_vg"] = varG(rand_pop)
+    
+    gv_geno = bind_rows(gv_geno, 
+              as.data.frame(pullSnpGeno(gv_pop)) %>% 
+                filter(row_number() %% pulleach == 0))
+    
+    pheno_geno = bind_rows(pheno_geno, 
+              as.data.frame(pullSnpGeno(pheno_pop)) %>% 
+                filter(row_number() %% pulleach == 0))
+    
+    rand_geno = bind_rows(rand_geno, 
+              as.data.frame(pullSnpGeno(rand_pop)) %>% 
+                filter(row_number() %% pulleach == 0))
+
+    
+    # list(gv_pop, rand_pop) %>% 
+    #   set_names(c("gv_pop", "rand_pop")) %>% 
+    # iwalk(
+    # ~pullSnpGeno(.x) %>% 
+    #   as.data.frame() %>% 
+    #   filter(row_number() %% pulleach == 0) %>%
+    #   t() %>% 
+    #   as.data.frame() %>% 
+    #   mutate(rs = paste(rep(1:10, each = nqtl), seq(1:nqtl), sep = ":"),
+    #          a1 = "a1",
+    #          a2 = "a2") %>%
+    #   select(rs, a1, a2, everything()) %>% 
+    #   write_csv(paste0("generation_genotypes/", testname, ".", .y, ".replicate", run+1, ".genotypes.mgf"), append = TRUE))
+    
+    list(gv_pop, pheno_pop, rand_pop) %>% 
+      set_names(c("gv_pop", "pheno_pop", "rand_pop")) %>% 
+    iwalk(
+    ~pheno(.x) %>% 
+      as.data.frame() %>% 
+      filter(row_number() %% pulleach == 0) %>%
+      write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".", .y, ".replicate", run+1, ".trait_phenotypes.txt"), append = TRUE))
+    }
+  }
+  
+  if ("gv" %in% analyses){
+  gv_geno %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(rs = rownames(.),
+         a1 = "a1",
+         a2 = "a2") %>% 
+  select(rs, a1, a2, everything()) %>% 
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".gv_pop.replicate", run+1, ".genotypes.mgf"), 
+              col_names = FALSE)
+  }
+  
+  if ("pheno" %in% analyses){
+  pheno_geno %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(rs = rownames(.),
+         a1 = "a1",
+         a2 = "a2") %>% 
+  select(rs, a1, a2, everything()) %>% 
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".pheno_pop.replicate", run+1, ".genotypes.mgf"), 
+              col_names = FALSE)
+  }
+  if ("rand" %in% analyses){
+  rand_geno %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate(rs = rownames(.),
+         a1 = "a1",
+         a2 = "a2") %>% 
+  select(rs, a1, a2, everything()) %>% 
+      filter(!is.na(V1)) %>% 
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".rand_pop.replicate", run+1, ".genotypes.mgf"), 
+              col_names = FALSE)
+  }
+  
+}
+
+rep(1:(generation-burnins), each=crosses/pulleach) %>% 
+  as.data.frame() %>% 
+  write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".generation_phenotypes.txt"), 
+            col_names = FALSE)
+
+
+
+plot_grid(
+pops %>%
+  select(gen, run, pheno_g, gv_g, rand_g) %>% 
+  melt(id = c("gen", "run")) %>% 
+  ggplot(aes(gen, value, color = variable))+
+    geom_point(alpha = 0.3)+
+  geom_smooth(size = 1.5)+
+  labs(y = "Mean G", x = "Generation", main = "Genetic Gain") +
+  scale_color_viridis_d(end = 0.75),
+  #facet_grid(~burnin, scales = "free_x")
+
+pops %>% 
+  select(gen, run, pheno_vg, gv_vg, rand_vg) %>% 
+  melt(id = c("gen", "run")) %>% 
+  ggplot(aes(gen, value, color = variable))+
+    geom_point(alpha = 0.3)+
+  geom_smooth(size = 1.5)+
+  labs(y = "Var G", x = "Generation", main = "Genetic Variance")+
+  scale_color_viridis_d(end = 0.75),
+ncol = 1)
+ggsave(paste0("gpsm_runs/", testname, "/figures/", testname, ".g_vg.trends.png"), width = 8, height = 12)
+
+```
+
+#How to do uneven sampling of generations
+* Want most of our samples to be represented by most recent generations
+* How do we do this programmatically
+* Based on total number of individuals and number of generations that have been simulated
+* 
+```{r}
+rgamma(5000,shape = 0.)
+```
+
+#Extracting relevant genotype data for GPSM analyses
+* When we do this would it be smart to use all of my replicates to calculate "dosage" genotypes for each of the segregating sites? 
+```{r}
+
+paste0("/data/tnr343/gpsm_sims/generation_genotypes/", testname, ".gv_pop.gen", seq(burnins+1,generation), ".replicate1.csv")%>% 
+  set_names(nm = (basename(.))) %>%
+  map(~read_csv(.x)) %>% 
+  reduce(left_join,by = c("rs", "a1", "a2")) %>% 
+  write_csv(paste0(testname, ".gv_pop.combined.replicate1.mgf"),
+            col_names = FALSE) 
+
+rep(1:(generation-burnins), each=crosses/pulleach) %>% 
+  as.data.frame() %>% 
+  write_tsv(paste0(testname, ".gv_pop.combined.replicate1.phenotypes.txt"), 
+            col_names = FALSE)
+
+
+
+paste0("/data/tnr343/gpsm_sims/generation_genotypes/", testname, ".rand_pop.gen", seq(burnins+1,generation), ".replicate1.csv")%>% 
+  set_names(nm = (basename(.))) %>%
+  map(~read_csv(.x)) %>% 
+  reduce(left_join,by = c("rs", "a1", "a2")) %>% 
+  write_csv(paste0(testname, ".rand_pop.combined.replicate1.mgf"),
+            col_names = FALSE) 
+
+rep(1:(generation-burnins), each=crosses/pulleach) %>% 
+  as.data.frame() %>% 
+  write_tsv(paste0(testname, ".rand_pop.combined.replicate1.phenotypes.txt"), 
+            col_names = FALSE)
+```
+
+
+#Running GEMMA
+```{bash}
+
+/usr/bin/pigz generation_genotypes/scenario11/*.mgf
+
+~/gemma/bin/gemma -g generation_genotypes/scenario11/scenario11.gv_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario11/scenario11.generation_phenotypes.txt -gk 2 -outdir gpsm_runs/scenario11/ -a generation_genotypes/scenario11/scenario11.snp.annotation.txt -o scenario11.gv_pop.replicate1.grm; /usr/bin/pigz gpsm_runs/scenario11/*grm.sXX.txt
+
+~/gemma/bin/gemma -g generation_genotypes/scenario11/scenario11.gv_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario11/scenario11.generation_phenotypes.txt -lmm 4 -maf 0 -n 1 -k gpsm_runs/scenario11/scenario11.gv_pop.replicate1.grm.sXX.txt.gz -a generation_genotypes/scenario11/scenario11.snp.annotation.txt -outdir gpsm_runs/scenario11/ -o scenario11.gv_pop.replicate1.gpsm
+
+~/gemma/bin/gemma -g generation_genotypes/scenario11/scenario11.pheno_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario11/scenario11.generation_phenotypes.txt -gk 2 -outdir gpsm_runs/scenario11/ -a generation_genotypes/scenario11/scenario11.snp.annotation.txt -o scenario11.pheno_pop.replicate1.grm; /usr/bin/pigz gpsm_runs/scenario11/*grm.sXX.txt
+
+~/gemma/bin/gemma -g generation_genotypes/scenario11/scenario11.pheno_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario11/scenario11.generation_phenotypes.txt -lmm 4 -maf 0 -n 1 -k gpsm_runs/scenario11/scenario11.pheno_pop.replicate1.grm.sXX.txt.gz -a generation_genotypes/scenario11/scenario11.snp.annotation.txt -outdir gpsm_runs/scenario11/ -o scenario11.pheno_pop.replicate1.gpsm
+
+~/gemma/bin/gemma -g generation_genotypes/scenario11/scenario11.rand_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario11/scenario11.generation_phenotypes.txt -gk 2 -outdir gpsm_runs/scenario11/ -a generation_genotypes/scenario11/scenario11.snp.annotation.txt -o scenario11.rand_pop.replicate1.grm; /usr/bin/pigz gpsm_runs/scenario11/*grm.sXX.txt
+
+~/gemma/bin/gemma -g generation_genotypes/scenario11/scenario11.rand_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario11/scenario11.generation_phenotypes.txt -lmm 4 -maf 0 -n 1 -k gpsm_runs/scenario11/scenario11.rand_pop.replicate1.grm.sXX.txt.gz -a generation_genotypes/scenario11/scenario11.snp.annotation.txt -outdir gpsm_runs/scenario11/ -o scenario11.rand_pop.replicate1.gpsm
+
+
+```
+
+#For trait GWAS if we want to do them
+```{bash}
+~/gemma/bin/gemma -g generation_genotypes/scenario10/scenario10.gv_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario10/scenario10.gv_pop.replicate1.trait_phenotypes.txt -lmm 4 -maf 0 -n 1 -k gpsm_runs/scenario10/scenario10.gv_pop.replicate1.grm.sXX.txt.gz -a generation_genotypes/scenario10/scenario10.snp.annotation.txt -outdir gpsm_runs/scenario10/ -o scenario10.gv_pop.replicate1.trait_gwas
+
+~/gemma/bin/gemma -g generation_genotypes/scenario10/scenario10.pheno_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario10/scenario10.pheno_pop.replicate1.trait_phenotypes.txt -lmm 4 -maf 0 -n 1 -k gpsm_runs/scenario10/scenario10.pheno_pop.replicate1.grm.sXX.txt.gz -a generation_genotypes/scenario10/scenario10.snp.annotation.txt -outdir gpsm_runs/scenario10/ -o scenario10.pheno_pop.replicate1.trait_gwas
+
+~/gemma/bin/gemma -g generation_genotypes/scenario10/scenario10.rand_pop.replicate1.genotypes.mgf.gz -p generation_genotypes/scenario10/scenario10.rand_pop.replicate1.trait_phenotypes.txt -lmm 4 -maf 0 -n 1 -k gpsm_runs/scenario10/scenario10.rand_pop.replicate1.grm.sXX.txt.gz -a generation_genotypes/scenario10/scenario10.snp.annotation.txt -outdir gpsm_runs/scenario10/ -o scenario10.rand_pop.replicate1.trait_gwas
+```
+
+
+#Plotting GPSM QQ and Manhattan plots for three selection regimes
+```{r}
+true_qtl = read_csv("generation_genotypes/scenario12/scenario12.true_qtl.csv")
+
+ggqq(readgwas("gpsm_runs/scenario12/scenario12.gv_pop.replicate1.gpsm.assoc.txt")$p_score)+
+  ggtitle("Scenario12 True BV Selection GPSM")
+#ggsave("gpsm_runs/")
+ggmanhattan(readgwas("gpsm_runs/scenario12/scenario12.gv_pop.replicate1.gpsm.assoc.txt"), 
+            value = q,
+            sigsnps = true_qtl$rs)+
+  ggtitle("Scenario12 True BV Selection GPSM")
+
+
+
+ggqq(readgwas("gpsm_runs/scenario12/scenario12.rand_pop.replicate1.gpsm.assoc.txt")$p_score)+
+  ggtitle("Scenario12 Random Selection GPSM")
+#ggsave("gpsm_runs/")
+ggmanhattan(readgwas("gpsm_runs/scenario12/scenario12.rand_pop.replicate1.gpsm.assoc.txt"), 
+            value = q,
+            sigsnps = true_qtl$rs)+
+  ggtitle("Scenario12 Random Selection GPSM")
+
+
+
+ggqq(readgwas("gpsm_runs/scenario12/scenario12.pheno_pop.replicate1.gpsm.assoc.txt")$p_score)+
+  ggtitle("Scenario12 Phenotypic Selection GPSM")
+#ggsave("gpsm_runs/")
+ggmanhattan(readgwas("gpsm_runs/scenario12/scenario12.pheno_pop.replicate1.gpsm.assoc.txt"), 
+            value = q,
+            sigsnps = true_qtl$rs)+
+  ggtitle("Scenario12 Phenotypic Selection GPSM")
+
+ggplot(true_qtl, aes(effect))+
+  geom_histogram()
+```
+
+
+###GPSM genome-wide plots
+```{r}
+
+as.character(seq(1,8)) %>% 
+  map(
+    ~plot_grid(
+      readgwas(paste0("output/scenario", .x, ".rand_pop.combined.replicate1.gpsm.assoc.txt")) %>% 
+        ggmanhattan(value = q)+
+        ggtitle(paste("Scenario", .x, "Null Model, No Selection")),
+      readgwas(paste0("output/scenario", .x, ".gv_pop.combined.replicate1.gpsm.assoc.txt")) %>% 
+        ggmanhattan(value = q)+
+        ggtitle(paste("Scenario", .x, "Model with Selection")), 
+      ncol = 1))
+run = "8"
+
+
+plot_grid(
+      readgwas(paste0("output/scenario", run, ".rand_pop.combined.replicate1.gpsm.assoc.txt")) %>% 
+        ggmanhattan(value = q,
+                    sigsnps = filter(., q < 0.1 & rs %in% read_csv(paste0("gpsm_runs/scenario", run, ".trait.csv"))$rs)$rs)+
+        ggtitle(paste("Scenario", run, "Null Model, No Selection")),
+      readgwas(paste0("output/scenario", run, ".rand_pop.combined.replicate1.gpsm.assoc.txt")) %>% 
+        ggmanhattan(value = q,
+                    sigsnps = filter(., q < 0.1 & rs %in% read_csv(paste0("gpsm_runs/scenario", run, ".trait.csv"))$rs)$rs)+
+        ggtitle(paste("Scenario", run, "Null Model, No Selection")),
+      readgwas(paste0("output/scenario", run, ".gv_pop.combined.replicate1.gpsm.assoc.txt")) %>% 
+        ggmanhattan(value = q,
+                    sigsnps = filter(., q < 0.1 & rs %in% read_csv(paste0("gpsm_runs/scenario", run, ".trait.csv"))$rs)$rs)+
+        ggtitle(paste("Scenario", run, "Model with Selection")),
+      readgwas(paste0("output/scenario", run, ".gv_pop.combined.replicate1.gpsm.assoc.txt")) %>% 
+        ggmanhattan(value = q,
+                    sigsnps = filter(., q < 0.1 & rs %in% read_csv(paste0("gpsm_runs/scenario", run, ".trait.csv"))$rs)$rs)+
+        ggtitle(paste("Scenario", run, "Model with Selection"))
+      ncol = 1)
+
+readgwas(paste0("output/scenario", run, ".gv_pop.combined.replicate1.gpsm.assoc.txt")) %>% 
+        ggmanhattan(value = q,
+                    sigsnps = filter(., q < 0.1 & rs %in% read_csv(paste0("gpsm_runs/scenario", run, ".trait.csv"))$rs)$rs)+
+        ggtitle(paste("Scenario", run, "Model with Selection"))
+
+readgwas(paste0("output/scenario", run, ".gv_pop.combined.replicate1.gpsm.assoc.txt")) %>% View()
+read_tsv("output/scenario8.gv_pop.bslmm.gpsm.param.txt") %>% 
+  mutate(effect_size = abs(alpha + beta*gamma)) %>% 
+  right_join(trait, by = "rs") %>% 
+  mutate(effect = abs(effect)) %>% 
+  select(-rs) %>% 
+  cor(., use = "complete.obs")
+```
+
+
+###Extracting genotypic data from simulated generations
+* Lots of ways to go about extracting SNP data to perform our GWAS analyses on. 
+    + Pull IBD haplotypes
+    + SNP chip variants (for simulated SNP chip above)
+    + All segregating sites
+    + Only genotypes at QTL
+    + Can specify specific chromosomes to pull out information (makes things easier to do computationally)
+* Depending on our simulations, we'll want to pull out the actual QTL for sure, and likely other segregating sites
+
+
+```{r}
+read_tsv("output/test.ebv.gpsm.assoc.txt") %>% 
+  .$p_score %>% 
+  ggqq()
+
+read_tsv("output/test.ebv.gpsm.assoc.txt") %>% 
+  mutate(pos = as.numeric(str_split_fixed(rs, "_", n = 2)[,2])) %>% 
+  ggplot(., aes(x = pos, y = -log10(p_score)))+
+  geom_point()
+
+
+read_tsv("output/test.rand.gpsm.assoc.txt") %>% 
+  .$p_score %>% 
+  ggqq()
+
+read_tsv("output/test.rand.gpsm.assoc.txt") %>% 
+  mutate(pos = as.numeric(str_split_fixed(rs, "_", n = 2)[,2])) %>% 
+  ggplot(., aes(x = pos, y = -log10(p_score)))+
+  geom_point()
+```
+#Effects of drift as a function of effective population size
+```{r}
+driftNeutral <- function(initial,total.pop,no.males=total.pop/2,no.females=total.pop/2,cycles=30,plot=F,sims=1,sleep=0){
+  no.males = 2*no.males #total number of male alleles
+  no.females = 2*no.females #total number of female alleles (notice total.pop is always multiplied by 2 in function)
+  prog <- c(rep("A",initial*total.pop*2),rep("B",(1-initial)*total.pop*2))
+  maleprog <- c()
+  femaleprog <- c()
+  frequency <- c()
+  frequency[1] <- length(which(prog=="A"))/length(prog)
+  for(i in 1:cycles){
+    maleprog <- sample(prog,size=no.males,replace=T)  #sample male alleles from total population
+    maleprog <- rep(maleprog,length.out=total.pop)
+    femaleprog <- sample(prog,size=no.females,replace=F) #sample females from total population
+    femaleprog <- rep(femaleprog,length.out=total.pop)
+    prog <- c(maleprog,femaleprog)
+    frequency[i+1] <- length(which(prog=="A"))/(2*total.pop)
+  }
+  dat <- matrix(nrow={cycles+1},ncol=2)
+  dat[,1] <- c(0:cycles)
+  dat[,2] <- frequency
+  finalfrequencies <- c()
+  finalfrequencies[1] <- frequency[cycles+1]
+  if(plot==T) plot(dat,type="l",ylim=c(0,1),xlab="Generation", ylab="Frequency")
+  if(sims > 1){
+    for(j in 2:sims){
+        Sys.sleep(sleep)
+        prog <- c(rep("A",initial*total.pop*2),rep("B",(1-initial)*total.pop*2))
+        maleprog <- c()
+        femaleprog <- c()
+        frequency <- c()
+        frequency[1] <- length(which(prog=="A"))/length(prog)
+        for(i in 1:cycles){
+          maleprog <- sample(prog,size=no.males,replace=T)  #sample male alleles from total population
+          maleprog <- rep(maleprog,length.out=total.pop)
+          femaleprog <- sample(prog,size=no.females,replace=F) #sample females from total population
+          femaleprog <- rep(femaleprog,length.out=total.pop)
+          prog <- c(maleprog,femaleprog)
+          frequency[i+1] <- length(which(prog=="A"))/(2*total.pop)
+        }
+        dat <- matrix(nrow={cycles+1},ncol=2)
+        dat[,1] <- c(0:cycles)
+        dat[,2] <- frequency
+        if(plot==T)lines(dat, type="l")
+        finalfrequencies[j] <- frequency[cycles+1]
+    }
+  }
+  return(finalfrequencies)
+}
+
+driftNeutral(initial = 0.5, 
+             total.pop = 10, 
+             cycles = 20, 
+             plot = TRUE,
+             sims = 100) %>% 
+  as.data.frame() %>% 
+  mutate(change = abs(.-0.5)) %>% .$change %>% median()
+```
+
