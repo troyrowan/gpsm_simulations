@@ -62,6 +62,9 @@ pheno_pop = newPop(founderPop)
 gv_pop = newPop(founderPop)
 rand_pop = newPop(founderPop)
 
+gv_qtl = bind_cols(trait, data.frame(matrix(nrow=nqtl*chrom, ncol=gens-burnins)))
+  pheno_qtl =  bind_cols(trait, data.frame(matrix(nrow=nqtl*chrom, ncol=gens-burnins)))
+  rand_qtl =  bind_cols(trait, data.frame(matrix(nrow=nqtl*chrom, ncol=gens-burnins)))
 
 for(generation in 0:gens){
   pops[generation + 1, "gen"] = generation
@@ -139,6 +142,9 @@ for(generation in 0:gens){
                           as.data.frame(pullSnpGeno(rand_pop)) %>%
                             filter(row_number() %% pulleach == 0))
 
+gv_qtl[,(generation-burnins+ncol(trait))] <- pullQtlGeno(gv_pop) %>% as.data.frame() %>% colSums()/(2*crosses) %>% t() %>% as.vector()
+pheno_qtl[,(generation-burnins+ncol(trait))] <- pullQtlGeno(pheno_pop) %>% as.data.frame() %>% colSums()/(2*crosses) %>% t() %>% as.vector()
+rand_qtl[,(generation-burnins+ncol(trait))] <- pullQtlGeno(rand_pop) %>% as.data.frame() %>% colSums()/(2*crosses) %>% t() %>% as.vector()
 
     # list(gv_pop, rand_pop) %>%
     #   set_names(c("gv_pop", "rand_pop")) %>%
@@ -174,6 +180,8 @@ if ("gv" %in% analyses){
     select(rs, a1, a2, everything()) %>%
     write_csv(paste0("generation_genotypes/", testname, "/", testname, ".gv_pop.genotypes.mgf"),
               col_names = FALSE)
+  gv_qtl %>%
+	write_csv(paste0("gpsm_runs/", testname, "/", testname, ".gv_pop.qtl_trajectories.csv"))
 }
 
 if ("pheno" %in% analyses){
@@ -186,6 +194,8 @@ if ("pheno" %in% analyses){
     select(rs, a1, a2, everything()) %>%
     write_csv(paste0("generation_genotypes/", testname, "/", testname, ".pheno_pop.genotypes.mgf"),
               col_names = FALSE)
+  pheno_qtl %>%
+    write_csv(paste0("gpsm_runs/", testname, "/", testname, ".pheno_pop.qtl_trajectories.csv"))
 }
 if ("rand" %in% analyses){
   rand_geno %>%
@@ -198,7 +208,8 @@ if ("rand" %in% analyses){
     filter(!is.na(V1)) %>%
     write_csv(paste0("generation_genotypes/", testname, "/", testname, ".rand_pop.genotypes.mgf"),
               col_names = FALSE)
-}
+  rand_qtl %>%
+    write_csv(paste0("gpsm_runs/", testname, "/", testname, ".rand_pop.qtl_trajectories.csv"))}
 
 rep(1:(generation-burnins), each=crosses/pulleach) %>%
   as.data.frame() %>%

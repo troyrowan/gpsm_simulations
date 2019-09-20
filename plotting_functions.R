@@ -1,7 +1,7 @@
 readgwas <- function(filepath){
-    #read_tsv(filepath, col_names = TRUE, col_types=cols(rs = col_character())) %>%
-    read_tsv(filepath,
-             col_names = TRUE) %>%
+  #read_tsv(filepath, col_names = TRUE, col_types=cols(rs = col_character())) %>%
+  read_tsv(filepath,
+           col_names = TRUE) %>%
     mutate(q = qvalue(p_score)$qvalues) %>%
 
     mutate(pos = ps) %>%
@@ -24,15 +24,16 @@ ggqq <- function(pvector){
 }
 
 ggmanhattan <- function(inputfile,
-         prune = 1.0,
-         value = p,
-         alpha = 0.5,
-         pcol = "p_score",
-         colors = c("gray12", "gray55"), 
-         sigsnps = NULL,
-         sigsnps2 = NULL,
-         sigsnpcolor = "red",
-         sigsnpcolor2 = "blue"){
+                        prune = 1.0,
+                        value = p,
+                        alpha = 0.5,
+                        pcol = "p_score",
+                        colors = c("gray12", "gray55"),
+                        sigsnps = NULL,
+                        sigsnps2 = NULL,
+                        sigsnpcolor = "red",
+                        sigsnpcolor2 = "blue",
+                        true_qtl = NULL){
   require(qvalue)
   require(dplyr)
   require(stringr)
@@ -61,6 +62,9 @@ ggmanhattan <- function(inputfile,
     left_join(gwas, ., by=c("chr"="chr")) %>%
     arrange(chr, pos) %>%
     mutate( BPcum=pos+tot)
+  print(head(don))
+
+  if (is.null(true_qtl)){
 
   axisdf = don %>% group_by(chr) %>% summarize(center=( max(BPcum) + min(BPcum) ) / 2 )
   #v from above
@@ -95,6 +99,54 @@ ggmanhattan <- function(inputfile,
     theme(axis.text.x = element_text(color = "grey20", size = 12, angle = 0, hjust = .5, vjust = .5, face = "plain"),
           axis.text.y = element_text(color = "grey20", size = 20, angle = 0, hjust = 1, vjust = 0.5, face = "plain"),
           axis.title.x = element_text(color = "grey20", size = 20, angle = 0, hjust = .5, vjust = 0, face = "bold"),
-          axis.title.y = element_text(color = "grey20", size = 20, angle = 90, hjust = .5, vjust = 2.5, face = "bold"))
+          axis.title.y = element_text(color = "grey20", size = 20, angle = 90, hjust = .5, vjust = 2.5, face = "bold"))}
+
+  if (!is.null(true_qtl)){
+    qtldon = left_join(true_qtl, don) %>%
+      filter(rs %in% true_qtl$rs & rs %in% don$rs)
+    newdon = filter(don, !rs %in% qtldon$rs)
+
+
+    axisdf = don %>% group_by(chr) %>% summarize(center=( max(BPcum) + min(BPcum) ) / 2 )
+    # from above
+    gwas_plot = ggplot(newdon, aes(x=BPcum, y=-log10(!!v))) +
+      geom_point(shape = 1, size = 2.3, alpha = 0.5, shape = "a", color = "black")+
+      #scale_shape(solid = F)+
+      #scale_fill_manual(values = rep(colors, 29)) +
+      #geom_point(filter(don, !rs %in% qtldon$rs), aes(x = BPcum, y = -log10(!!v), color=as.factor(chr)), alpha=alpha, size=1.3) +
+      geom_point(data = qtldon, aes(x = BPcum, y = -log10(!!v), color = abs(effect)), size = 2.3) +
+      #scale_color_gradient(low = "grey55", high = "red")+
+      scale_color_viridis_c()+
+      scale_x_continuous(label = axisdf$chr[c(TRUE, FALSE)], breaks= axisdf$center[c(TRUE, FALSE)] ) +
+      #scale_y_continuous(expand = c(0, 0.01) ) +
+      labs(x = "",
+           y = case_when(v == "p" ~ expression(paste(-log10, "(", italic('p'), ")")),
+                         v == "q" ~ expression(paste(-log10, "(", italic('q'), ")"))))+
+      theme_bw() +
+
+      #geom_point(data = subset(don, rs %in% sigsnps2),color = sigsnpcolor2, size = 1.3) +
+      geom_hline(yintercept = case_when(v == "p" ~ -log10(1e-5),
+                                        v == "q" ~ -log10(0.1)),
+                 color = "red",
+                 size = 0.5) +
+      theme(#legend.position="none",
+            panel.border = element_blank(),
+            panel.grid.major.x = element_blank(),
+            panel.grid.minor = element_blank()
+      )+
+      theme(
+        panel.background = element_rect(fill = "transparent") # bg of the panel
+        , plot.background = element_rect(fill = "transparent", color = NA) # bg of the plot
+        , panel.grid.major = element_blank() # get rid of major grid
+        , panel.grid.minor = element_blank() # get rid of minor grid
+        , legend.background = element_rect(fill = "transparent") # get rid of legend bg
+        , legend.box.background = element_rect(fill = "transparent") # get rid of legend panel bg
+      )+
+      theme(axis.text.x = element_text(color = "grey20", size = 12, angle = 0, hjust = .5, vjust = .5, face = "plain"),
+            axis.text.y = element_text(color = "grey20", size = 20, angle = 0, hjust = 1, vjust = 0.5, face = "plain"),
+            axis.title.x = element_text(color = "grey20", size = 20, angle = 0, hjust = .5, vjust = 0, face = "bold"),
+            axis.title.y = element_text(color = "grey20", size = 20, angle = 90, hjust = .5, vjust = 2.5, face = "bold"))
+    }
+
   return(gwas_plot)
 }

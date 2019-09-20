@@ -63,6 +63,9 @@ for(run in 0:(reps-1)){
   gv_pop = newPop(founderPop)
   rand_pop = newPop(founderPop)
 
+  gv_qtl = data.frame(matrix(nrow=nqtl*chrom, ncol=gens-burnins))
+  pheno_qtl =  data.frame(matrix(nrow=nqtl*chrom, ncol=gens-burnins))
+  rand_qtl =  data.frame(matrix(nrow=nqtl*chrom, ncol=gens-burnins))
 
   for(generation in 0:gens){
     pops[gens*run + generation + 1, "gen"] = generation
@@ -132,15 +135,17 @@ for(run in 0:(reps-1)){
       gv_geno = bind_rows(gv_geno,
                           as.data.frame(pullSnpGeno(gv_pop)) %>%
                             filter(row_number() %% pulleach == 0))
+      gv_qtl[,(generation-burnins)] <- pullQtlGeno(gv_pop) %>% as.data.frame() %>% colSums()/(2*crosses) %>% t() %>% as.vector()
 
       pheno_geno = bind_rows(pheno_geno,
                              as.data.frame(pullSnpGeno(pheno_pop)) %>%
                                filter(row_number() %% pulleach == 0))
+      pheno_qtl[,(generation-burnins)] <- pullQtlGeno(pheno_pop) %>% as.data.frame() %>% colSums()/(2*crosses) %>% t() %>% as.vector()
 
       rand_geno = bind_rows(rand_geno,
                             as.data.frame(pullSnpGeno(rand_pop)) %>%
                               filter(row_number() %% pulleach == 0))
-
+      rand_qtl[,(generation-burnins)] <- pullQtlGeno(rand_pop) %>% as.data.frame() %>% colSums()/(2*crosses) %>% t() %>% as.vector()
 
       # list(gv_pop, rand_pop) %>%
       #   set_names(c("gv_pop", "rand_pop")) %>%
@@ -209,8 +214,14 @@ rep(1:(generation-burnins), each=crosses/pulleach) %>%
   write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".generation_phenotypes.txt"),
             col_names = FALSE)
 
+bind_cols(trait, gv_qtl) %>%
+  write_csv("gpsm_runs/", testname, "/", testname, "gv_pop.qtl_trajectories.csv")
 
+bind_cols(trait, pheno_qtl) %>%
+  write_csv("gpsm_runs/", testname, "/", testname, "pheno_pop.qtl_trajectories.csv")
 
+bind_cols(trait, rand_qtl) %>%
+  write_csv("gpsm_runs/", testname, "/", testname, "rand_pop.qtl_trajectories.csv")
 plot_grid(
   pops %>%
     select(gen, run, pheno_g, gv_g, rand_g) %>%

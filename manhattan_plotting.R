@@ -45,7 +45,7 @@ height = 8)
 
 ggmanhattan(gpsm,
 						value = q,
-						sigsnps = true_qtl$rs)+
+						true_qtl = true_qtl)+
 							ggtitle(paste("Scenario", scenario_number , selection_type))
 ggsave(paste0("gpsm_runs/", arg[1], "/figures/", arg[1], ".", arg[2], ".gpsm.manhattan.png"),
 width = 11,
