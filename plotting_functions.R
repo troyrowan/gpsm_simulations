@@ -34,11 +34,11 @@ ggmanhattan <- function(inputfile,
                         sigsnpcolor = "red",
                         sigsnpcolor2 = "blue",
                         true_qtl = NULL){
+  require(cowplot)
   require(qvalue)
   require(dplyr)
   require(stringr)
   require(ggplot2)
-  require(cowplot)
   require(viridis)
   #Allows p or q value to be interpreted as column name in ggplot call
   v = enexpr(value)

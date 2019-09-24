@@ -1,12 +1,15 @@
 pops = ["gv_pop", "pheno_pop", "rand_pop"]
 rule gpsm_testing:
 	input:
-		# endpoint = expand("gpsm_runs/{run}/{run}.{population}.qtl_trajectories.csv",
-		# run = ["scenario" + str(xx) for xx in list(range(1,73))],
-		# population = pops)
+		#endpoint = expand("gpsm_runs/{run}/{run}.{population}.qtl_trajectories.csv",
+		#run = ["scenario" + str(xx) for xx in list(range(1,73))],
+		#population = pops)
 		manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png",
-		run = ["scenario" + str(xx) for xx in list(range(73,185))],
+		run = ["scenario" + str(xx) for xx in list(range(1,184))],
 		population = pops)
+		# manhattan = expand("gpsm_runs/{run}/{run}.{population}.gpsm.assoc.txt",
+		# run = ["scenario" + str(xx) for xx in list(range(1,184))],
+		# population = pops)
 
 
 
