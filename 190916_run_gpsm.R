@@ -18,12 +18,13 @@ source(args[1])
 #                      segSites=5000,
 #                      species = "CATTLE")
 founderPop = readRDS("founderpop.RDS")
-
+#founderPop = readRDS("100K_cattle_founderpop.RDS")
 SP = SimParam$new(founderPop)
 SP$addTraitA(nQtlPerChr=nqtl, gamma = gamma, shape = shape)
 SP$setGender("yes_sys")
 SP$addSnpChip(nSnpPerChr = nsnps)
 SP$setVarE(h2 = h2)
+SP$nThreads = 1L
 
 trait = data.frame(chr = rep(1:chrom, each = nqtl),
                    pos = SP$traits[[1]]@lociLoc,
@@ -83,7 +84,7 @@ for(generation in 0:gens){
                             nFemale=females,
                             nMale=males,
                             use="pheno",
-                            nCrosses=crosses) #specify selection intensity, selection criteria, number of offspring
+                            nCrosses=burnincrosses) #specify selection intensity, selection criteria, number of offspring
     pops[generation + 1, "pheno_g"] = meanG(pheno_pop) #Updates genetic values in dataframe
     pops[generation + 1, "pheno_vg"] = varG(pheno_pop) #Updates genetic values in dataframe
 
@@ -91,7 +92,7 @@ for(generation in 0:gens){
                          nFemale=females,
                          nMale=males,
                          use="pheno",
-                         nCrosses=crosses)
+                         nCrosses=burnincrosses)
     pops[generation + 1, "gv_g"] = meanG(gv_pop) #Updates genetic values in dataframe
     pops[generation + 1, "gv_vg"] = varG(gv_pop) #Updates genetic values in dataframe
 
@@ -99,7 +100,7 @@ for(generation in 0:gens){
                            nFemale=females,
                            nMale=males,
                            use="pheno",
-                           nCrosses=crosses)
+                           nCrosses=burnincrosses)
     pops[generation + 1, "rand_g"] = meanG(rand_pop) #Updates genetic values in dataframe
     pops[generation + 1, "rand_vg"] = varG(rand_pop) #Updates genetic values in dataframe
   }
@@ -226,7 +227,8 @@ plot_grid(
     geom_point(alpha = 0.3)+
     geom_smooth(size = 1.5)+
     labs(y = "Mean G", x = "Generation", main = "Genetic Gain") +
-    scale_color_viridis_d(end = 0.75),
+    scale_color_viridis_d(end = 0.75)+
+  cowplot::theme_cowplot(),
   #facet_grid(~burnin, scales = "free_x")
 
   pops %>%
@@ -236,6 +238,7 @@ plot_grid(
     geom_point(alpha = 0.3)+
     geom_smooth(size = 1.5)+
     labs(y = "Var G", x = "Generation", main = "Genetic Variance")+
-    scale_color_viridis_d(end = 0.75),
+    scale_color_viridis_d(end = 0.75)+
+  cowplot::theme_cowplot(),
   ncol = 1)
 ggsave(paste0("gpsm_runs/", testname, "/figures/", testname, ".g_vg.trends.png"), width = 8, height = 12)
