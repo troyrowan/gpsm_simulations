@@ -1,5 +1,14 @@
-*config*
+.Rhistory
+.snakemake/
+.Rproj.user/
+*.pdf
+*.log
+*config.R
 *.txt
 *.mgf
 *.gz
+*.png
+*.RDS
+*.Rproj
 *.csv
+.Rproj.user

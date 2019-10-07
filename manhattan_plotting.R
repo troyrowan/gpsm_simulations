@@ -49,7 +49,8 @@ trajectories =
 print(head(trajectories))
 
 ggqq(gpsm$p_score)+
-	ggtitle(paste("Scenario", scenario_number , selection_type))
+	ggtitle(paste("Scenario", scenario_number , selection_type))+
+cowplot::theme_cowplot()
 ggsave(paste0("gpsm_runs/", arg[1], "/figures/", arg[1], ".", arg[2], ".gpsm.qq.png"),
 width = 8,
 height = 8)
@@ -70,6 +71,7 @@ plot_grid(
 	  ggplot(aes(x = generation, y = AF, group = rs, color = effect))+
 	  geom_smooth(se = FALSE)+
 	  scale_color_viridis_c()+
+		ylim(c(0,1))+
 	  labs(x = "Generation", title = paste("Scenario", scenario_number , selection_type, "Top QTL"))+
   cowplot::theme_cowplot(),
 	trajectories %>%
@@ -80,6 +82,7 @@ plot_grid(
 	  ggplot(aes(x = generation, y = AF, group = rs, color = -log10(q)))+
 	  geom_smooth(se = FALSE)+
 	  scale_color_viridis_c()+
+		ylim(c(0,1))+
 	  labs(x = "Generation", title = paste("Scenario", scenario_number , selection_type, "Top QTL"))+
   cowplot::theme_cowplot(),
 	nrow = 2)

@@ -1,0 +1,147 @@
+---
+title: "GPSM Simulations"
+author: "Troy Rowan"
+date: "9/19/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(cowplot)
+library(reshape2)
+library(qvalue)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(purrr)
+library(forcats)
+library(stringr)
+knitr::opts_chunk$set(echo = TRUE)
+source("plotting_functions.R")
+```
+
+##Tracking AF over time
+
+```{r}
+scenario100_qtl_gv = read_csv("gpsm_runs/scenario77/scenario77.gv_pop.qtl_trajectories.csv") %>% 
+  left_join(., readgwas("gpsm_runs/scenario77/scenario77.gv_pop.gpsm.assoc.txt"))
+scenario100_qtl_pheno = read_csv("gpsm_runs/scenario77/scenario77.pheno_pop.qtl_trajectories.csv") %>% 
+  left_join(., readgwas("gpsm_runs/scenario77/scenario77.pheno_pop.gpsm.assoc.txt"))
+scenario100_qtl_rand = read_csv("gpsm_runs/scenario77/scenario77.rand_pop.qtl_trajectories.csv") %>% 
+  left_join(., readgwas("gpsm_runs/scenario77/scenario77.rand_pop.gpsm.assoc.txt"))
+
+scenario100_qtl_gv %>%
+  top_n(., 20, abs(effect)) %>% 
+  melt(id = c("chr", "pos", "effect", "rs"), value.name = "AF") %>% 
+  mutate(generation = as.numeric(str_remove(variable, "^X"))) %>% 
+  ggplot(aes(x = generation, y = AF, color = rs))+
+  geom_smooth(se = FALSE)+
+  scale_color_viridis_d()+
+  labs(x = "Generation", title = "True BV Selection Top QTL")
+
+scenario100_qtl_pheno %>%
+  top_n(., 20, abs(effect)) %>% 
+  melt(id = c("chr", "pos", "effect", "rs"), value.name = "AF") %>% 
+  mutate(generation = as.numeric(str_remove(variable, "^X"))) %>% 
+  ggplot(aes(x = generation, y = AF, color = rs))+
+  geom_smooth(se = FALSE)+
+  scale_color_viridis_d()+
+  labs(x = "Generation", title = "Phenotypic Selection Top QTL")
+
+scenario100_qtl_rand %>%
+  top_n(., 20, abs(effect)) %>% 
+  melt(id = c("chr", "pos", "effect", "rs"), value.name = "AF") %>% 
+  mutate(generation = as.numeric(str_remove(variable, "^X"))) %>% 
+  ggplot(aes(x = generation, y = AF, color = rs))+
+  geom_smooth(se = FALSE)+
+  scale_color_viridis_d()+
+  labs(x = "Generation", title = "Random Selection Top QTL")
+#############################################################
+scenario100_qtl_gv %>%
+  filter(-log10(q) > 0.8) %>% 
+  top_n(., 20, abs(-log10(q))) %>%
+  melt(id = c("chr", "pos", "effect", "rs", "af", "p_score", "q"), value.name = "AF") %>% 
+  mutate(generation = as.numeric(str_remove(variable, "^X"))) %>% 
+  ggplot(aes(x = generation, y = AF, group = rs, color = -log10(q)))+
+  geom_smooth(se = FALSE)+
+  scale_color_viridis_c()+
+  labs(x = "Generation", title = "True BV Selection Top GPSM Hits")
+
+scenario100_qtl_pheno %>%
+  filter(-log10(q) > 0.8) %>%
+  top_n(., 20, abs(-log10(q))) %>%
+  melt(id = c("chr", "pos", "effect", "rs", "af", "p_score", "q"), value.name = "AF") %>% 
+  mutate(generation = as.numeric(str_remove(variable, "^X"))) %>% 
+  ggplot(aes(x = generation, y = AF, group = rs, color = -log10(q)))+
+  geom_smooth(se = FALSE)+
+  scale_color_viridis_c()+
+  labs(x = "Generation", title = "Phenotypic Selection Top GPSM Hits")
+
+scenario100_qtl_rand %>%
+  filter(-log10(q) > 0.8) %>% 
+  top_n(., 20, abs(-log10(q))) %>%
+  melt(id = c("chr", "pos", "effect", "rs", "af", "p_score", "q"), value.name = "AF") %>% 
+  mutate(generation = as.numeric(str_remove(variable, "^X"))) %>% 
+  ggplot(aes(x = generation, y = AF, group = rs, color = -log10(q)))+
+  geom_smooth(se = FALSE)+
+  scale_color_viridis_c()+
+  labs(x = "Generation", title = "Random Selection Top GPSM Hits")
+
+
+```
+
+```{r}
+readgwas("gpsm_runs/scenario86/scenario86.gv_pop.gpsm.assoc.txt") %>% 
+  ggmanhattan(value = q)
+
+readgwas("gpsm_runs/scenario86/scenario86.pheno_pop.gpsm.assoc.txt") %>% 
+  ggmanhattan(value = q)
+```
+
+
+```{r}
+var_explained = read_tsv("gpsm_runs/scenario77/scenario77.gv_pop.gpsm.assoc.txt") %>% 
+  mutate(cum_pos = (chr-1)*1000+ps) %>% 
+  mutate(rs = paste(chr, ps, sep = ":")) %>% 
+  left_join(., select(read_csv("gpsm_runs/scenario77/scenario77.gv_pop.qtl_trajectories.csv"), rs, effect), by = "rs")
+
+
+var_explained %>% 
+  filter(is.na(effect)) %>% 
+  ggplot(aes(x = cum_pos, y = beta))+
+    geom_point(shape = 1, alpha = 0.5)+
+    geom_point(data = filter(var_explained, !is.na(effect)), aes(x = cum_pos, y = beta, color = effect))+
+    scale_color_viridis_c()
+```
+
+#Identifying the average magnitude of allele frequency change in a population not under selection
+* Here I'm using the randomly-mated populations to quantify this
+* Use the completely polygenic architecture (ie 10,000 causal SNPs) - Scenario 9
+* Since we keep track of this information, we can calculate changes 
+* This will tell us what we should expect in an effective population of around 180 or so over the course of 20 generations
+    + Or maybe we should just be looking for the distribution in a couple of
+* We see MUCH larger changes than what we'd expect under the "drift variance "
+```{r}
+run9 = read_csv("gpsm_runs/scenario9/scenario9.rand_pop.qtl_trajectories.csv") %>% 
+  mutate(change1 = X2 - X1,
+         change2 = X3 - X2,
+         change3 = X4 - X3,
+         change4 = X5 - X4,
+         change5 = X6 - X5,
+         change6 = X7 - X6,
+         change7 = X8 - X7,
+         change8 = X9 - X8,
+         change9 = X10 - X9,
+         change10 = abs(X11 - X10)) %>% 
+  select(rs, contains("change")) %>% 
+  melt(id = "rs")
+
+read_csv("gpsm_runs/scenario9/scenario9.rand_pop.qtl_trajectories.csv") %>% 
+  mutate(change1 = X2 - X1,
+         dvar = (X1*(1-X1))/(1.5*180)) %>% 
+  select(rs, change1, dvar) %>% View()
+
+ggplot(run9, aes(value))+
+  geom_histogram()
+
+```
+
