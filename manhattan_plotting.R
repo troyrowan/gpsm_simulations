@@ -55,13 +55,20 @@ ggsave(paste0("gpsm_runs/", arg[1], "/figures/", arg[1], ".", arg[2], ".gpsm.qq.
 width = 8,
 height = 8)
 
-ggmanhattan(gpsm,
+plot_grid(
+	ggmanhattan(gpsm,
 						value = q,
 						true_qtl = true_qtl)+
-							ggtitle(paste("Scenario", scenario_number , selection_type))
+							ggtitle(paste("Scenario", scenario_number , selection_type)),
+	ggmanhattan(gpsm,
+							value = p,
+							true_qtl = true_qtl)+
+								ggtitle(paste("Scenario", scenario_number , selection_type)),
+							nrow = 2)
 ggsave(paste0("gpsm_runs/", arg[1], "/figures/", arg[1], ".", arg[2], ".gpsm.manhattan.png"),
-width = 11,
+width = 16,
 height = 8)
+
 
 plot_grid(
 	trajectories %>%
@@ -75,7 +82,7 @@ plot_grid(
 	  labs(x = "Generation", title = paste("Scenario", scenario_number , selection_type, "Top QTL"))+
   cowplot::theme_cowplot(),
 	trajectories %>%
-		filter(-log10(q) > 0.8) %>%# only looking at significant or nearly significant loci
+		filter(-log10(q) > 1) %>%# only looking at significant or nearly significant loci
 		top_n(., 20, -log10(q)) %>%
 	  melt(id = c("chr", "pos", "effect", "rs", "af", "p_score", "q"), value.name = "AF") %>%
 	  mutate(generation = as.numeric(str_remove(variable, "^X"))) %>%
@@ -83,7 +90,7 @@ plot_grid(
 	  geom_smooth(se = FALSE)+
 	  scale_color_viridis_c()+
 		ylim(c(0,1))+
-	  labs(x = "Generation", title = paste("Scenario", scenario_number , selection_type, "Top QTL"))+
+	  labs(x = "Generation", title = paste("Scenario", scenario_number , selection_type, "Top GPSM Hits"))+
   cowplot::theme_cowplot(),
 	nrow = 2)
 ggsave(

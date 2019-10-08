@@ -1,15 +1,19 @@
 pops = ["gv_pop", "pheno_pop", "rand_pop"]
 rule gpsm_testing:
 	input:
-		#endpoint = expand("gpsm_runs/{run}/{run}.{population}.qtl_trajectories.csv",
-		#run = ["scenario" + str(xx) for xx in list(range(244,274))],
-		#population = pops)
-		#manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png",
-		#run = ["scenario" + str(xx) for xx in list(range(214, 244))],
-		#population = pops)
-		manhattan = expand("gpsm_runs/{run}/{run}.{population}.gpsm.assoc.txt",
-		run = ["scenario" + str(xx) for xx in list(range(244,274))],
+		# endpoint = expand("gpsm_runs/{run}/{run}.{population}.qtl_trajectories.csv",
+		# run = ["scenario" + str(xx) for xx in list(range(1,274))],
+		# population = pops)
+		manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.qtl_trajectories.png",
+		run = ["scenario" + str(xx) for xx in list(range(1, 100))],
 		population = pops)
+		#manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png",
+		#run = ["scenario" + str(xx) for xx in list(range(244, 274))],
+		#population = pops)
+		# manhattan = expand("gpsm_runs/{run}/{run}.{population}.gpsm.assoc.txt",
+		# run = ["scenario" + str(xx) for xx in list(range(244,274))],
+		# population = pops)
+
 
 #Probably not the best way of doing most this: I skipped a step or two by manually making my param files and founder pop outside of Snakemake, but they could easily be their own rule.
 
@@ -87,6 +91,7 @@ rule plot_manhattans:
 		"logs/plot_manhattans/{run}.{population}.log"
 	output:
 		qq = "gpsm_runs/{run}/figures/{run}.{population}.gpsm.qq.png",
-		manhattan = "gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png"
+		manhattan = "gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png",
+		qtls = "gpsm_runs/{run}/figures/{run}.{population}.qtl_trajectories.png"
 	shell: #No actual input or output files in this shell command, but it still requires input files and will create stated outputfiles.
 		"(Rscript manhattan_plotting.R {params.run} {params.pop} ) > {log}"
