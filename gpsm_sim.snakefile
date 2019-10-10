@@ -4,14 +4,14 @@ rule gpsm_testing:
 		# endpoint = expand("gpsm_runs/{run}/{run}.{population}.qtl_trajectories.csv",
 		# run = ["scenario" + str(xx) for xx in list(range(1,274))],
 		# population = pops)
-		manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.qtl_trajectories.png",
-		run = ["scenario" + str(xx) for xx in list(range(1, 100))],
+		# manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.qtl_trajectories.png",
+		# run = ["scenario" + str(xx) for xx in list(range(100, 187))],
+		# population = pops)
+		manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png",
+		run = ["scenario" + str(xx) for xx in list(range(274, 334))],
 		population = pops)
-		#manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png",
-		#run = ["scenario" + str(xx) for xx in list(range(244, 274))],
-		#population = pops)
 		# manhattan = expand("gpsm_runs/{run}/{run}.{population}.gpsm.assoc.txt",
-		# run = ["scenario" + str(xx) for xx in list(range(244,274))],
+		# run = ["scenario" + str(xx) for xx in list(range(199,209))],
 		# population = pops)
 
 
@@ -32,7 +32,7 @@ rule run_sims:
 		"logs/run_sims/{run}.log"
 	output:
 		gen_phenotypes = "generation_genotypes/{run}/{run}.generation_phenotypes.txt",
-		real_phenotypes = expand("generation_genotypes/{{run}}/{{run}}.{population}.trait_phenotypes.txt", population = pops), #expands over three populations, but uses whatever "run" environment tells it to
+		##real_phenotypes = expand("generation_genotypes/{{run}}/{{run}}.{population}.trait_phenotypes.txt", population = pops), #expands over three populations, but uses whatever "run" environment tells it to
 		genotypes = expand("generation_genotypes/{{run}}/{{run}}.{population}.genotypes.mgf.gz", population = pops), #Final output, RScript will only output .mgf file (see params), final result after gzipping will be this file though
 		true_qtl = "generation_genotypes/{run}/{run}.true_qtl.csv",
 		genetic_gain = "gpsm_runs/{run}/figures/{run}.g_vg.trends.png",
@@ -76,7 +76,7 @@ rule run_gpsm:
 		"gpsm_runs/{run}/{run}.{population}.gpsm.assoc.txt",
 		"gpsm_runs/{run}/{run}.{population}.gpsm.log.txt"
 	shell:
-		"(gemma98 -g {input.genotypes} -p {input.gen_phenotypes} -k {input.grm} -a {input.snps} -n 1 -lmm 4 -maf 0 -outdir {params.outdir} -o {params.oprefix}) > {log}"
+		"(gemma98 -g {input.genotypes} -p {input.gen_phenotypes} -k {input.grm} -a {input.snps} -n 1 -lmm 4 -maf 0.01 -outdir {params.outdir} -o {params.oprefix}) > {log}"
 
 rule plot_manhattans:
 	input:
