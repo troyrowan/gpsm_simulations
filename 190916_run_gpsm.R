@@ -19,7 +19,8 @@ source(args[1])
 #                      nChr=10,
 #                      segSites=5000,
 #                      species = "CATTLE")
-founderPop = readRDS("founderpop.RDS")
+#founderPop = readRDS("founderpop.RDS")
+founderPop = readRDS("")
 #founderPop = readRDS("100K_cattle_founderpop.RDS")
 SP = SimParam$new(founderPop)
 SP$addTraitA(nQtlPerChr=nqtl, gamma = gamma, shape = shape)
@@ -37,7 +38,7 @@ SP$nThreads = 1L
 
 #Doing this after saving these variables should allow us specify pulln in the param file, then save one of the above dataframes to the sampler variable
 sampler = pulln
-gens = str_split_fixed(samplingname, "_", n = 2)[,2] %>% str_replace("gen", "") %>% as.numeric()
+gens = str_split_fixed(samplingname, "_", n = 2)[,2] %>% str_replace("gen", "") %>% as.numeric() +burnins
 
 #gens =  deparse(substitute(sampler)) %>% str_split_fixed(., "_", 2)[2] %>% str_replace("gen", "") %>% as.numeric()
 trait = data.frame(chr = rep(1:chrom, each = nqtl),
@@ -219,7 +220,7 @@ if ("rand" %in% analyses){
            a1 = "a1",
            a2 = "a2") %>%
     select(rs, a1, a2, everything()) %>%
-    filter(!is.na(V1)) %>%
+    #filter(!is.na(V1)) %>%
     write_csv(paste0("generation_genotypes/", testname, "/", testname, ".rand_pop.genotypes.mgf"),
               col_names = FALSE)
   rand_qtl %>%
