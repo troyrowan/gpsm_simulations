@@ -9,6 +9,8 @@ library(cowplot)
 library(reshape2)
 library(qvalue)
 library(stringr)
+
+#This sources a config file with information about simulation parameters
 args <- commandArgs(TRUE)
 
 #This reads in all of the arguments from the param file
@@ -20,14 +22,16 @@ source(args[1])
 #                      segSites=5000,
 #                      species = "CATTLE")
 #founderPop = readRDS("founderpop.RDS")
-founderPop = readRDS("")
+#This reads in same founder population that we use to do gene drop in Red Angus Pedigree 200K genotypes total for 7601 founder individuals
+#Not sure how this'll work as we do selection (particularly WRT burn-in, but we'll see I guess)
+founderPop = readRDS("RAN_founderHaps.200K.7601.rds")
 #founderPop = readRDS("100K_cattle_founderpop.RDS")
 SP = SimParam$new(founderPop)
 SP$addTraitA(nQtlPerChr=nqtl, gamma = gamma, shape = shape)
 SP$setGender("yes_sys")
 SP$addSnpChip(nSnpPerChr = nsnps)
 SP$setVarE(h2 = h2)
-SP$nThreads = 1L
+#SP$nThreads = 1L
 
 # even_20gen = data.frame(gen = 20:1, keepind = 500)
 # even_10gen = data.frame(gen = 10:1, keepind = 1000)
@@ -36,9 +40,14 @@ SP$nThreads = 1L
 # uneven_10gen = data.frame(gen = 10:1, keepind = c(3126, 3604, 1696, 819, 423, 190, 76, 27, 25, 14))
 # uneven_5gen = data.frame(gen = 5:1, keepind = c(7329, 1919, 560, 144, 48))
 
-#Doing this after saving these variables should allow us specify pulln in the param file, then save one of the above dataframes to the sampler variable
-sampler = pulln
-gens = str_split_fixed(samplingname, "_", n = 2)[,2] %>% str_replace("gen", "") %>% as.numeric() +burnins
+#Reads these dataframes from the param file. Use the number of generations to select both the even and uneven samplign schemes
+#By doing this we can do two different genotype sampling strategies on a single population
+pulln = case_when(gens == 5 ~ list(even_5gen, uneven_5gen),
+									gens == 10 ~ list(even_10gen, uneven_10gen),
+									gens == 20 ~ list(even_20gen, uneven_20gen))
+
+sampler_even = pulln[[1]]
+sampler_uneven = pulln[[2]]
 
 #gens =  deparse(substitute(sampler)) %>% str_split_fixed(., "_", 2)[2] %>% str_replace("gen", "") %>% as.numeric()
 trait = data.frame(chr = rep(1:chrom, each = nqtl),
@@ -66,13 +75,19 @@ pops = data.frame(gen = as.numeric(),
                   rand_g = as.numeric(),
                   rand_vg = as.numeric())
 
-gv_geno = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
-colnames(gv_geno)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
-rand_geno = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
-colnames(rand_geno)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
-pheno_geno = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
-colnames(pheno_geno)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
+gv_geno_even = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(gv_geno_even)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
+rand_geno_even = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(rand_geno_even)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
+pheno_geno_even = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(pheno_geno_even)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
 
+gv_geno_uneven = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(gv_geno_uneven)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
+rand_geno_uneven = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(rand_geno_uneven)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
+pheno_geno_uneven = data.frame(matrix(ncol = chrom*nsnps, nrow = 0))
+colnames(pheno_geno_uneven)<-paste("SNP", seq(1,nsnps*chrom), sep = "_")
 
 pheno_pop = newPop(founderPop)
 gv_pop = newPop(founderPop)
@@ -145,17 +160,30 @@ for(generation in 0:gens){
     pops[generation + 1, "rand_g"] = meanG(rand_pop)
     pops[generation + 1, "rand_vg"] = varG(rand_pop)
 
-    gv_geno = bind_rows(gv_geno,
+    gv_geno_even = bind_rows(gv_geno_even,
                         as.data.frame(pullSnpGeno(gv_pop)) %>%
-                          sample_n(sampler[generation-burnins,]$keepind))
+                          sample_n(sampler_even[generation-burnins,]$keepind))
 
-    pheno_geno = bind_rows(pheno_geno,
+    pheno_geno_even = bind_rows(pheno_geno_even,
                            as.data.frame(pullSnpGeno(pheno_pop)) %>%
-                             sample_n(sampler[generation-burnins,]$keepind))
+                             sample_n(sampler_even[generation-burnins,]$keepind))
 
-    rand_geno = bind_rows(rand_geno,
+    rand_geno_even = bind_rows(rand_geno_even,
                           as.data.frame(pullSnpGeno(rand_pop)) %>%
-                            sample_n(sampler[generation-burnins,]$keepind))
+                            sample_n(sampler_even[generation-burnins,]$keepind))
+
+#For uneven sampling of genotypes (but from the same selected population)
+    gv_geno_uneven = bind_rows(gv_geno_uneven,
+                    as.data.frame(pullSnpGeno(gv_pop)) %>%
+                      sample_n(sampler_uneven[generation-burnins,]$keepind))
+
+    pheno_geno_uneven = bind_rows(pheno_geno_uneven,
+                       as.data.frame(pullSnpGeno(pheno_pop)) %>%
+                         sample_n(sampler_uneven[generation-burnins,]$keepind))
+
+    rand_geno_uneven = bind_rows(rand_geno_uneven,
+                      as.data.frame(pullSnpGeno(rand_pop)) %>%
+                        sample_n(sampler_uneven[generation-burnins,]$keepind))
 
 gv_qtl[,(generation-burnins+ncol(trait))] <- pullQtlGeno(gv_pop) %>% as.data.frame() %>% colSums()/(2*crosses) %>% t() %>% as.vector()
 pheno_qtl[,(generation-burnins+ncol(trait))] <- pullQtlGeno(pheno_pop) %>% as.data.frame() %>% colSums()/(2*crosses) %>% t() %>% as.vector()
@@ -185,35 +213,57 @@ rand_qtl[,(generation-burnins+ncol(trait))] <- pullQtlGeno(rand_pop) %>% as.data
   }
 }
 
+#These will first check to see if we're doing GV/Pheno/Random selection, then write genotypes for both the even and uneven sampling strategies
+
 if ("gv" %in% analyses){
-  gv_geno %>%
+  gv_geno_even %>%
     t() %>%
     as.data.frame() %>%
     mutate(rs = rownames(.),
            a1 = "a1",
            a2 = "a2") %>%
     select(rs, a1, a2, everything()) %>%
-    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".gv_pop.genotypes.mgf"),
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".gv_pop.even.genotypes.mgf"),
               col_names = FALSE)
+  gv_geno_uneven %>%
+    t() %>%
+    as.data.frame() %>%
+    mutate(rs = rownames(.),
+           a1 = "a1",
+           a2 = "a2") %>%
+    select(rs, a1, a2, everything()) %>%
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".gv_pop.uneven.genotypes.mgf"),
+            col_names = FALSE)
   gv_qtl %>%
 	write_csv(paste0("gpsm_runs/", testname, "/", testname, ".gv_pop.qtl_trajectories.csv"))
 }
 
 if ("pheno" %in% analyses){
-  pheno_geno %>%
+  pheno_geno_even %>%
     t() %>%
     as.data.frame() %>%
     mutate(rs = rownames(.),
            a1 = "a1",
            a2 = "a2") %>%
     select(rs, a1, a2, everything()) %>%
-    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".pheno_pop.genotypes.mgf"),
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".pheno_pop.even.genotypes.mgf"),
               col_names = FALSE)
+
+  pheno_geno_uneven %>%
+    t() %>%
+    as.data.frame() %>%
+    mutate(rs = rownames(.),
+           a1 = "a1",
+           a2 = "a2") %>%
+    select(rs, a1, a2, everything()) %>%
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".pheno_pop.uneven.genotypes.mgf"),
+            col_names = FALSE)
+
   pheno_qtl %>%
     write_csv(paste0("gpsm_runs/", testname, "/", testname, ".pheno_pop.qtl_trajectories.csv"))
 }
 if ("rand" %in% analyses){
-  rand_geno %>%
+  rand_geno_even %>%
     t() %>%
     as.data.frame() %>%
     mutate(rs = rownames(.),
@@ -221,12 +271,29 @@ if ("rand" %in% analyses){
            a2 = "a2") %>%
     select(rs, a1, a2, everything()) %>%
     #filter(!is.na(V1)) %>%
-    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".rand_pop.genotypes.mgf"),
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".rand_pop.even.genotypes.mgf"),
               col_names = FALSE)
+
+  rand_geno_uneven %>%
+    t() %>%
+    as.data.frame() %>%
+    mutate(rs = rownames(.),
+           a1 = "a1",
+           a2 = "a2") %>%
+    select(rs, a1, a2, everything()) %>%
+    #filter(!is.na(V1)) %>%
+    write_csv(paste0("generation_genotypes/", testname, "/", testname, ".rand_pop.uneven.genotypes.mgf"),
+              col_names = FALSE)
+
   rand_qtl %>%
     write_csv(paste0("gpsm_runs/", testname, "/", testname, ".rand_pop.qtl_trajectories.csv"))}
 
-rep(sampler$gen, sampler$keepind) %>%
+rep(sampler_even$gen, sampler_even$keepind) %>%
+  as.data.frame() %>%
+  write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".generation_phenotypes.txt"),
+            col_names = FALSE)
+
+rep(sampler_uneven$gen, sampler_uneven$keepind) %>%
   as.data.frame() %>%
   write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".generation_phenotypes.txt"),
             col_names = FALSE)
