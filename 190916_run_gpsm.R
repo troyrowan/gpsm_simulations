@@ -24,7 +24,7 @@ source(args[1])
 #founderPop = readRDS("founderpop.RDS")
 #This reads in same founder population that we use to do gene drop in Red Angus Pedigree 200K genotypes total for 7601 founder individuals
 #Not sure how this'll work as we do selection (particularly WRT burn-in, but we'll see I guess)
-founderPop = readRDS("RAN_founderHaps.200K.7601.rds")
+founderPop = readRDS("RAN_founderHaps.50K.7601.rds")
 #founderPop = readRDS("100K_cattle_founderpop.RDS")
 SP = SimParam$new(founderPop)
 SP$addTraitA(nQtlPerChr=nqtl, gamma = gamma, shape = shape)
@@ -290,12 +290,12 @@ if ("rand" %in% analyses){
 
 rep(sampler_even$gen, sampler_even$keepind) %>%
   as.data.frame() %>%
-  write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".generation_phenotypes.txt"),
+  write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".even.generation_phenotypes.txt"),
             col_names = FALSE)
 
 rep(sampler_uneven$gen, sampler_uneven$keepind) %>%
   as.data.frame() %>%
-  write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".generation_phenotypes.txt"),
+  write_tsv(paste0("generation_genotypes/", testname, "/", testname, ".uneven.generation_phenotypes.txt"),
             col_names = FALSE)
 
 
