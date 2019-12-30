@@ -7,17 +7,18 @@ rule gpsm_testing:
 		# manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.{sampling}.qtl_trajectories.png",
 		# run = ["scenario" + str(xx) for xx in list(range(100, 187))],
 		# population = pops)
-		manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.{sampling}.gpsm.manhattan.png",
-		run = ["scenario" + str(xx) for xx in list(range(334, 335))],
+		manhattan = expand("gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png",
+		run = ["scenario" + str(xx) for xx in list(range(334, 370))],
 		population = pops,
-		sampling = ["even", "uneven"])
+		)
 		# manhattan = expand("generation_genotypes/{run}/{run}.{population}.{sampling}.genotypes.mgf.gz",
 		# run = ["scenario" + str(xx) for xx in list(range(334, 370))],
 		# population = pops,
 		# sampling = ["even", "uneven"])
 		# manhattan = expand("gpsm_runs/{run}/{run}.{population}.{sampling}.gpsm.assoc.txt",
-		# run = ["scenario" + str(xx) for xx in list(range(199,209))],
-		# population = pops)
+		# run = ["scenario" + str(xx) for xx in list(range(334,370))],
+		# population = pops,
+		# sampling = ["even", "uneven"])
 
 
 #Probably not the best way of doing most this: I skipped a step or two by manually making my param files and founder pop outside of Snakemake, but they could easily be their own rule.
@@ -27,7 +28,7 @@ rule run_sims:
 		#founderpop = "100K_cattle_founderpop.RDS",
 		param = "gpsm_runs/{run}/{run}.config.R", #Config files created from my running sheet of simulation scenarios
 		founderpop = "founderpop.RDS" #Manually created cattle founder population with 10 chromosomes, 1K SNPs per chromosome
-	threads: 1 #Example of how specifying threads works with Snakemake
+	threads: 10 #Example of how specifying threads works with Snakemake
 	priority: 100 #Priority ensures that all iterations of this rule will be run before any subsequent rules
 	params:#Example of param where this is an even more intermediate file
 		genos = expand("generation_genotypes/{{run}}/{{run}}.{population}.{sampling}.genotypes.mgf",
@@ -55,6 +56,7 @@ rule make_grm:
 	input:
 		genotypes = "generation_genotypes/{run}/{run}.{population}.{sampling}.genotypes.mgf.gz",
 		gen_phenotypes = "generation_genotypes/{run}/{run}.{sampling}.generation_phenotypes.txt"
+	threads: 8
 	params:
 		grm = "gpsm_runs/{run}/{run}.{population}.{sampling}.grm.sXX.txt", #Again this could be an output of the rule, but I choose to gzip in the same shell command, so it's no longer the final output of the rule
 		outdir = "gpsm_runs/{run}",
@@ -75,6 +77,7 @@ rule run_gpsm:
 		gen_phenotypes = "generation_genotypes/{run}/{run}.{sampling}.generation_phenotypes.txt",
 		grm = "gpsm_runs/{run}/{run}.{population}.{sampling}.grm.sXX.txt.gz",
 		snps = "generation_genotypes/{run}/{run}.snp.annotation.txt"
+	threads: 8
 	params:
 		outdir = "gpsm_runs/{run}",
 		oprefix = "{run}.{population}.{sampling}.gpsm"
@@ -90,18 +93,19 @@ rule run_gpsm:
 
 rule plot_manhattans:
 	input:
-		assoc = "gpsm_runs/{run}/{run}.{population}.{sampling}.gpsm.assoc.txt",
+		assoc = expand("gpsm_runs/{{run}}/{{run}}.{{population}}.{sampling}.gpsm.assoc.txt", sampling = ["even", "uneven"]),
 		#true_qtl = "generation_genotypes/{run}/{run}.true_qtl.csv"
 	params:
 		run = "{run}",  #These strings are the only input that this script needs to find relevant inputs and plot them
 		pop = "{population}"
 	benchmark:
-		"benchmarks/plot_manhattans/{run}.{population}.{sampling}.benchmark.txt"
+		"benchmarks/plot_manhattans/{run}.{population}.benchmark.txt"
 	log:
-		"logs/plot_manhattans/{run}.{population}.{sampling}.log"
+		"logs/plot_manhattans/{run}.{population}.log"
 	output:
-		qq = "gpsm_runs/{run}/figures/{run}.{population}.{sampling}.gpsm.qq.png",
-		manhattan = "gpsm_runs/{run}/figures/{run}.{population}.{sampling}.gpsm.manhattan.png",
+		qq = "gpsm_runs/{run}/figures/{run}.{population}.gpsm.qq.png",
+		manhattan = "gpsm_runs/{run}/figures/{run}.{population}.gpsm.manhattan.png",
 		#qtls = "gpsm_runs/{run}/figures/{run}.{population}.qtl_trajectories.png"
 	shell: #No actual input or output files in this shell command, but it still requires input files and will create stated outputfiles.
-		"(Rscript manhattan_plotting.R {params.run} {params.pop} ) > {log}"
+		#"(Rscript manhattan_plotting.R {params.run} {params.pop}) > {log}"
+		"(Rscript sampling_manhattan_plotting.R {params.run} {params.pop}) > {log}"
