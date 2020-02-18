@@ -90,11 +90,17 @@ scenario100_qtl_rand %>%
 ```
 
 ```{r}
-readgwas("gpsm_runs/scenario86/scenario86.gv_pop.gpsm.assoc.txt") %>% 
+readgwas("gpsm_runs/scenario85/scenario85.gv_pop.gpsm.assoc.txt") %>% 
   ggmanhattan(value = q)
 
-readgwas("gpsm_runs/scenario86/scenario86.pheno_pop.gpsm.assoc.txt") %>% 
+readgwas("gpsm_runs/scenario85/scenario85.pheno_pop.gpsm.assoc.txt") %>% 
   ggmanhattan(value = q)
+
+readgwas("gpsm_runs/scenario85/scenario85.gv_pop.gpsm.assoc.txt") %>% 
+  ggmanhattan(value = p)
+
+readgwas("gpsm_runs/scenario85/scenario85.pheno_pop.gpsm.assoc.txt") %>% 
+  ggmanhattan(value = p)
 ```
 
 
@@ -113,7 +119,7 @@ var_explained %>%
     scale_color_viridis_c()
 ```
 
-#Identifying the average magnitude of allele frequency change in a population not under selection
+##Identifying the average magnitude of allele frequency change in a population not under selection
 * Here I'm using the randomly-mated populations to quantify this
 * Use the completely polygenic architecture (ie 10,000 causal SNPs) - Scenario 9
 * Since we keep track of this information, we can calculate changes 
@@ -144,4 +150,135 @@ ggplot(run9, aes(value))+
   geom_histogram()
 
 ```
+
+##Reports at end of run
+```{r}
+true_gpsm = readgwas("gpsm_runs/scenario1000/scenario1000.gv_pop.gpsm.assoc.txt")
+true_aftime = read_csv("gpsm_runs/scenario1000/scenario1000.gv_pop.qtl_trajectories.csv")
+
+pheno_gpsm = readgwas("gpsm_runs/scenario1000/scenario1000.pheno_pop.gpsm.assoc.txt")
+pheno_aftime = read_csv("gpsm_runs/scenario1000/scenario1000.pheno_pop.qtl_trajectories.csv")
+
+rand_gpsm = readgwas("gpsm_runs/scenario1000/allmaf/scenario1000.rand_pop.gpsm.assoc.txt") %>% 
+  mutate(maf = case_when(af >= 0.5 ~ 1-af,
+                         TRUE ~ af)) %>% 
+  mutate(significant = case_when(q < 0.1 ~ "Significant",
+                                 TRUE ~ "NotSignificant"))
+rand_aftime = read_csv("gpsm_runs/scenario1000/allmaf/scenario1000.rand_pop.qtl_trajectories.csv")
+
+true_master = left_join(true_aftime, true_gpsm)
+pheno_master = left_join(pheno_aftime, pheno_gpsm)
+rand_master = left_join(rand_aftime, rand_gpsm)
+
+head(master)
+# master%>% 
+#   melt(id = c("chr", "pos", "effect", "rs", "af", "p_score", "q")) %>% 
+#   mutate(gen = as.numeric(str_replace(variable, "X", ""))) %>% 
+#   select(-variable) %>% 
+#   filter(rs == "2:858") %>% 
+#   glm(value ~ gen, data = .)$slope
+  
+rand_master %>% 
+  mutate(change = abs(X20-X1),
+         abc = -log10(q)) %>% 
+  lm(abc ~ effect + X1 + X20 + change + af, data = .) %>% 
+  summary()
+
+ggplot(rand_gpsm, aes(maf, color = significant))+
+  geom_density()
+
++
+  ylim(c(0,50))
+
+
+
+read_csv("gpsm_runs/scenario314/scenario314.gv_pop.qtl_trajectories.csv") %>% 
+  mutate(change = X1 - last(.))
+```
+
+#Correlations between effect estimates and AF. Is there bias?
+```{r}
+pheno = left_join(read_csv("gpsm_runs/scenario315/scenario315.pheno_pop.qtl_trajectories.csv",) %>% 
+            rename(snp = rs)%>% 
+                  mutate(av_change = (X1 - X10)/10), 
+          read_tsv("gpsm_runs/scenario315/scenario315.pheno_pop.gpsm.assoc.txt") %>% 
+            mutate(snp = paste(chr, ps, sep = ":"))) %>% 
+  mutate(change = X10-X1)
+
+ggplot(pheno, aes(beta, change))+
+  geom_point()+
+  labs(title = "Phenotypic Selection")
+
+summary(lm(change ~ beta, data = pheno))
+
+cor(pheno$change, pheno$beta, use = "complete.obs")
+
+
+
+
+tbv = left_join(read_csv("gpsm_runs/scenario315/scenario315.gv_pop.qtl_trajectories.csv") %>%
+                  rename(snp = rs) %>% 
+                  mutate(av_change = (X1 - X10)/10), 
+          read_tsv("gpsm_runs/scenario315/scenario315.gv_pop.gpsm.assoc.txt") %>% 
+            mutate(snp = paste(chr, ps, sep = ":"))) %>% 
+  mutate(change = X10-X1)
+
+ggplot(tbv, aes(beta, change))+
+  geom_point()+
+  labs(title = "True Breeding Value Selection")
+
+summary(lm(change ~ beta, data = tbv))
+
+cor(tbv$change, tbv$beta, use = "complete.obs")
+
+ggplot()
+
+```
+#Simulating Ages For GPSM Simulations
+```{r}
+read_tsv("generation_genotypes/scenario369/scenario369.uneven.generation_phenotypes.txt", col_names = c("generation")) %>% 
+  mutate(age = generation * rnorm(n(), mean = 5, sd = 0.1)) %>% 
+  mutate(age = max(age)-age) %>%  
+  ggplot(aes(age))+
+  geom_density()
+
+#ran = read_csv("/CIFS/MUG01_N/deckerje/tnr343/local_adaptation_genotypes/red_angus_phenotypes.csv")
+ggplot(sample_n(ran, 10000), aes(age))+
+  geom_density()
+```
+
+#Comparing Results with and without a GRM 
+```{r, fig.width=10, fig.height=5}
+
+plot_grid(
+  plot_grid(
+    read_gwas_out("gpsm_runs/scenario379/rep1/scenario379.gv_pop.even.generation.rep1.gpsm.nogrm.assoc.txt") %>% 
+      ggmanhattan2(), 
+    read_gwas_out("gpsm_runs/scenario379/rep1/scenario379.gv_pop.even.generation.rep1.gpsm.nogrm.assoc.txt") %>% 
+      .$p_score %>% 
+      ggqq(), 
+    rel_widths = c(2, 1.5), 
+    nrow = 1),
+  
+  
+  plot_grid(
+    read_gwas_out("gpsm_runs/scenario379/rep1/scenario379.gv_pop.even.generation.rep1.gpsm.assoc.txt") %>% 
+      ggmanhattan2(), 
+    read_gwas_out("gpsm_runs/scenario379/rep1/scenario379.gv_pop.even.generation.rep1.gpsm.assoc.txt") %>% 
+      .$p_score %>% 
+      ggqq(), 
+    rel_widths = c(2, 1.5), 
+    nrow = 1), 
+nrow = 2)
+
+
+```
+#Converting MGF files to be readable by GCTA
+```{r}
+snps = read_csv("/data/tnr343/gpsm_sims/generation_genotypes/scenario379/rep1/scenario379.rep1.snp.annotation.txt", col_names = c("rs", "pos", "chr"))
+gts = read_csv("/data/tnr343/gpsm_sims/generation_genotypes/scenario379/rep1/scenario379.gv_pop.even.rep1.genotypes.mgf.gz", col_names = FALSE) %>% 
+  t() %>% 
+  as.data.frame()
+```
+
 

@@ -1,0 +1,199 @@
+---
+title: "GPSM Report"
+author: "Troy Rowan"
+date: "1/23/2020"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+params:
+  scenario: scenario385
+  reps: 10
+---
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(qvalue)
+library(ggplot2)
+library(magrittr)
+library(rlang)
+library(tidylog)
+library(reshape2)
+options(scipen=999)
+source("plotting_functions.R")
+```
+
+####Functions for plotting simulated data specifically
+```{r}
+read_gwas_out <- function(filepath){
+  #read_tsv(filepath, col_names = TRUE, col_types=cols(rs = col_character())) %>%
+  read_tsv(filepath,
+           col_names = TRUE) %>%
+    mutate(q = qvalue(p_score)$qvalues) %>%
+
+    mutate(pos = ps) %>%
+    mutate(rs = paste(chr, pos, sep = ":")) %>%
+    select(rs, chr, pos , af, p_score, q)
+}
+```
+
+
+###Manhattan Plots {.tabset}
+
+```{r setup, include=TRUE, warning = FALSE, message = FALSE, fig.height = 5, fig.width = 10, results='asis', echo = FALSE}
+#Using only replicate 1 to generate these manhattan plots
+manhattan_plist = 
+  as.character(seq(1,params$reps)) %>% 
+    map(
+        ~bind_rows(
+          read_gwas_out(paste0("gpsm_runs/", params$scenario, "/rep", .x, "/", params$scenario, ".gv_pop.even.generation.rep", .x, ".gpsm.assoc.txt")) %>% 
+            mutate(pop = "TBV",
+                   sampling = "Even") %>% 
+            left_join(read_csv(paste0("gpsm_runs/", params$scenario, "/rep", .x, "/", params$scenario,".gv_pop.rep", .x,".qtl_trajectories.csv")) %>% 
+                        mutate(change = case_when(V5 == 1 | V5 == 0 ~ NA_real_,
+                              TRUE ~ abs(V5 - last(.))),
+           effect = abs(effect))),
+          read_gwas_out(paste0("gpsm_runs/", params$scenario, "/rep", .x, "/", params$scenario, ".gv_pop.uneven.generation.rep", .x, ".gpsm.assoc.txt"))%>% 
+            mutate(pop = "TBV",
+                   sampling = "Uneven") %>% 
+            left_join(read_csv(paste0("gpsm_runs/", params$scenario, "/rep", .x, "/", params$scenario,".gv_pop.rep", .x,".qtl_trajectories.csv")) %>% 
+                        mutate(change = case_when(V5 == 1 | V5 == 0 ~ NA_real_,
+                              TRUE ~ abs(V5 - last(.))),
+           effect = abs(effect))),
+          read_gwas_out(paste0("gpsm_runs/", params$scenario, "/rep", .x, "/", params$scenario, ".rand_pop.even.generation.rep", .x, ".gpsm.assoc.txt"))%>% 
+            mutate(pop = "Random",
+                   sampling = "Even") %>% 
+            left_join(read_csv(paste0("gpsm_runs/", params$scenario, "/rep", .x, "/", params$scenario,".rand_pop.rep", .x,".qtl_trajectories.csv")) %>% 
+                        mutate(change = case_when(V5 == 1 | V5 == 0 ~ NA_real_,
+                              TRUE ~ abs(V5 - last(.))),
+           effect = abs(effect))), 
+          read_gwas_out(paste0("gpsm_runs/", params$scenario, "/rep", .x, "/", params$scenario, ".rand_pop.uneven.generation.rep", .x, ".gpsm.assoc.txt"))%>% 
+            mutate(pop = "Random",
+                   sampling = "Uneven") %>% 
+            left_join(read_csv(paste0("gpsm_runs/", params$scenario, "/rep", .x, "/", params$scenario,".rand_pop.rep", .x,".qtl_trajectories.csv")) %>% 
+                        mutate(change = case_when(V5 == 1 | V5 == 0 ~ NA_real_,
+                              TRUE ~ abs(V5 - last(.))),
+           effect = abs(effect)))) %>% 
+      ggmanhattan(prune = 0.1)+
+        facet_grid(sampling ~ pop)+
+        labs(color = "Change")+
+        ggtitle(paste(params$scenario, "Rep", .x)))
+
+for (i in 1:length(manhattan_plist)){
+  cat("####", i, " \n")
+  print(manhattan_plist[[i]])
+  cat(' \n\n')
+}
+```
+
+#Allele frequency change plots
+These plots show the allele frequency changes over time for four classes of variants:
+1) Top 20 largest effect size variants in *randomly selected* population
+2) Top 20 largest effect size variants in *true breeding value selected* population
+3) True Positive SNPs (from true breeding value selection GPSM analysis) in *randomly selected* population
+4) True Positive SNPs in GPSM analysis of *True breeding value selected* population 
+
+\* Note here that significant SNPs in randomly mated population are same variants shown in the significant TBV panel, but with their frequency changes observed in the randomly mated populations
+\* Trajectory lines are colored by their simulated effect sizes
+
+###AF Trajectories {.tabset}
+```{r, warning=FALSE, message = FALSE, results='asis', echo = FALSE}
+
+af_plist = 
+  purrr::map(.x = seq(1,params$reps),
+    ~bind_rows(
+      read_csv(paste0("gpsm_runs/", params$scenario,"/rep", .x, "/", params$scenario,".gv_pop.rep", .x, ".qtl_trajectories.csv")) %>% 
+      mutate(change = case_when(V5 == 1 | V5 == 0 ~ NA_real_,
+                                TRUE ~ abs(V5 - last(.))),
+             effect = abs(effect),
+             pop = "TBV"),
+      read_csv(paste0("gpsm_runs/", params$scenario,"/rep", .x, "/", params$scenario,".rand_pop.rep", .x, ".qtl_trajectories.csv")) %>% 
+      mutate(change = case_when(V5 == 1 | V5 == 0 ~ NA_real_,
+                                TRUE ~ abs(V5 - last(.))),
+             effect = abs(effect),
+             pop = "Random")) %>% 
+        left_join(read_gwas_out(paste0("gpsm_runs/", params$scenario,"/rep", .x , "/", params$scenario,".gv_pop.even.generation.rep", .x, ".gpsm.assoc.txt"))) %>% 
+      mutate(significant = case_when(q < 0.1 | p_score < 1e-5 ~"Significant",
+                                     TRUE ~ "Not_Significant"),
+             bigeffect = case_when(rs %in% dplyr::top_n(x = ., 20, wt = effect)$rs ~ "Large_Effect",
+                                   TRUE ~ "small")) %>% 
+        melt(id = c("chr", "pos", "effect", "rs", "af", "p_score", "q", "significant", "bigeffect", "pop"), value.name = "AF") %>% 
+        mutate(variable = as.character(variable),
+               generation = as.numeric(str_remove(variable, "^V")),
+               panel = case_when(bigeffect == "Large_Effect" & pop == "Random" ~"Large_Effect_Random",
+                                 significant == "Significant" & pop == "Random" ~ "Significant_Random",
+                                 bigeffect == "Large_Effect" & pop == "TBV" ~ "Large_Effect_TBV",
+                                 significant == "Significant" & pop == "TBV" ~ "Significant_TBV")) %>% 
+      filter(!is.na(panel)) %>% 
+      ggplot(., aes(x = generation, y = AF, group = rs, color = effect))+
+      geom_smooth(se = FALSE)+
+      scale_color_viridis_c()+
+      ylim(c(0,1))+
+      cowplot::theme_cowplot()+
+      facet_wrap(~panel)+
+      ggtitle(paste(params$scenario, "Rep", .x)))
+
+
+for (i in 1:length(af_plist)){
+  cat("####", i, " \n")
+  print(af_plist[[i]])
+  cat(' \n\n')
+}
+```
+
+#Summary Statistics {.tabset}
+
+##True Breeding Value Selection
+
+```{r, warning=FALSE, message = FALSE, results='asis', echo = FALSE}
+
+purrr::map(.x = seq(1,params$reps),
+    ~read_csv(paste0("gpsm_runs/", params$scenario,"/rep", .x, "/", params$scenario,".gv_pop.rep", .x,".qtl_trajectories.csv")) %>% 
+      mutate(change = case_when(V5 == 1 | V5 == 0 ~ NA_real_,
+                              TRUE ~ abs(V5 - last(.))),
+           effect = abs(effect)) %>% 
+      left_join(read_gwas_out(paste0("gpsm_runs/", params$scenario,"/rep", .x, "/", params$scenario,".gv_pop.even.generation.rep", .x, ".gpsm.assoc.txt"))) %>% 
+      mutate(significant = case_when(q < 0.1 | p_score < 1e-5 ~"Sig",
+                                     TRUE ~ "NotSig")) %>% 
+  group_by(significant) %>% 
+  summarize(Count = n(),
+            AvgChange = mean(change, na.rm = TRUE),
+            AvgEffect = mean(effect, na.rm = TRUE)) %>% 
+    mutate(Rep = paste0("rep", .x))) %>% 
+  purrr::reduce(bind_rows) %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = significant, values_from = c(Count, AvgChange, AvgEffect)) #%>% 
+  #summarize_at(vars(-Rep), list(~mean(.), ~sd(.)))
+``` 
+
+##Random Selection
+
+```{r, warning=FALSE, message = FALSE, results='asis', echo = FALSE}
+purrr::map(.x = seq(1,params$reps),
+    ~read_csv(paste0("gpsm_runs/", params$scenario,"/rep", .x, "/", params$scenario,".rand_pop.rep", .x,".qtl_trajectories.csv")) %>% 
+      mutate(change = case_when(V5 == 1 | V5 == 0 ~ NA_real_,
+                              TRUE ~ abs(V5 - last(.))),
+           effect = abs(effect)) %>% 
+      full_join(read_gwas_out(paste0("gpsm_runs/", params$scenario,"/rep", .x, "/", params$scenario,".rand_pop.even.generation.rep", .x, ".gpsm.assoc.txt")) %>%  
+                filter(q < 0.1 | p_score < 1e-5)) %>% 
+      mutate(significant = case_when(q < 0.1 | p_score < 1e-5 ~"Sig",
+                                     TRUE ~ "NotSig")) %>% 
+  group_by(significant) %>% 
+  summarize(Count = n(),
+            AvgChange = mean(change, na.rm = TRUE),
+            AvgEffect = mean(effect, na.rm = TRUE)) %>% 
+    mutate(Rep = paste0("rep", .x))) %>% 
+  purrr::reduce(bind_rows) %>% 
+  ungroup() %>% 
+  pivot_wider(names_from = significant, values_from = c(Count, AvgChange, AvgEffect)) %>% 
+  select(Rep, Count_NotSig, Falses_Positives = Count_Sig, AvgChange_NotSig, AvgEffect_NotSig) #%>% 
+  #summarize_at(vars(-Rep), list(~mean(.), ~sd(.)))
+```
+

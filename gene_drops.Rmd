@@ -1,0 +1,146 @@
+---
+title: "GPSM Gene Drop"
+author: "Troy Rowan"
+date: "11/20/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(cowplot)
+library(reshape2)
+library(qvalue)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(purrr)
+library(forcats)
+library(stringr)
+#library(AlphaSimR)
+source("plotting_functions.R")
+```
+
+#Results of gene drop GPSM
+```{r}
+#20K genotypes
+as.character(seq(1,10)) %>%
+  purrr::map(
+    ~readgwas(paste0("/data/tnr343/gpsm_sims/gene_drop/run", .x, "/RAN.genedrop.run", .x, ".gpsm.assoc.txt")) %>% 
+      mutate(bpcum = seq(1, length(.$pos))) %>% 
+    ggplot(aes(bpcum, -log10(q)))+
+      geom_point()+
+      geom_hline(yintercept = 1, color = "red")
+)
+
+as.character(seq(21,30)) %>%
+  purrr::map(
+    ~readgwas(paste0("/data/tnr343/gpsm_sims/gene_drop/run", .x, "/RAN.genedrop.run", .x, ".gpsm.assoc.txt")) %>% 
+      mutate(bpcum = seq(1, length(.$pos))) %>% 
+    ggplot(aes(bpcum, -log10(p_score)))+
+      geom_point()+
+      geom_hline(yintercept = 5, color = "red")+
+      ggtitle(paste("Run", .x))+
+      labs(x = "Cumulative BP", y = "-log10(p)")+
+      ylim(c(0,8))
+)
+#Using 7601 founders and 50K genotypes
+#as.character(seq(31,40)) %>%
+  
+as.character(c(41:46, 48:50)) %>% 
+  purrr::map(
+    ~readgwas(paste0("/data/tnr343/gpsm_sims/gene_drop/simulations/run", .x, "/RAN.genedrop.run", .x, ".gpsm.assoc.txt")) %>% 
+      mutate(bpcum = seq(1, length(.$pos))) %>% 
+    ggplot(aes(bpcum, -log10(p_score)))+
+      geom_point()+
+      geom_hline(yintercept = 5, color = "red")+
+      ggtitle(paste("Run", .x))+
+      labs(x = "Cumulative BP", y = "-log10(p)")
+)
+
+readgwas(paste0("/data/tnr343/gpsm_sims/gene_drop/simulations/run46/RAN.genedrop.run46.gpsm.assoc.txt")) %>%
+    filter(p_score < 1e-5)
+```
+## Single SNP change
+```{r}
+read_tsv("/data/tnr343/gpsm_sims/gene_drop/run21/RAN.genedrop.run21.gpsm.assoc.txt") %>% View()
+testsnp = read_csv("/data/tnr343/gpsm_sims/gene_drop/testsnp.txt", col_names = FALSE) %>% select(-X1, -X2, -X3) %>% t() %>% data.frame() %>% 
+  cbind(read_tsv("/data/tnr343/gpsm_sims/gene_drop/simulations/run20/RAN.genedrop.run20.phenotypes.txt", col_names = FALSE))
+
+testsnp %>% 
+  mutate(AF = ./2,
+         YearOfBirth = 2019-X1) %>% 
+  select(AF, YearOfBirth) %>% 
+  ggplot(aes(YearOfBirth, AF))+
+  geom_smooth(se = FALSE, color = "dodgerblue", size = 3)+
+  ggtitle("Run 246: 8:363")+
+  ylim(c(0,1))+
+  ylab("Year of Birth")+
+  xlab("Allele Frequency")
+
+
+```
+#Real Haplotypes
+
+###Comparing minor allele frequency of simulated haplotypes vs. what we see in complete set of real data:
+```{r}
+sim_freq = readRDS("./gene_drop/simulated_haps.txt") %>% 
+  as.data.frame() %>% 
+  mutate(maf = case_when(. > 0.5 ~ 1 - .,
+                        TRUE ~ .))
+
+freq = read_table("/CIFS/MUG01_N/deckerje/tnr343/local_adaptation_genotypes/red_angus/190402_RAN/190402_RAN.frq") %>% 
+  mutate(maf =  case_when(MAF > 0.5 ~ 1 - MAF,
+                          TRUE ~ MAF)) %>% 
+  
+
+ggplot(data = sim_freq, aes(maf))+
+  geom_density(color = "indianred", size = 2)+
+  geom_density(data = freq, aes(maf), color = "dodgerblue", size = 2)
+```
+###Identifying "early" animals to become "true founder" haplotypes
+```{r}
+read_csv("gene_drop/red_angus_phenotypes.csv") %>% 
+  #select(international_id, age) %>% 
+  top_n(n = 1123, age) %>%
+  mutate(fid = 1,
+         iid = paste0("1_", international_id)) %>% 
+  select(iid) %>% 
+  write_tsv("gene_drop/old_animals.txt", col_names = FALSE)
+  
+
+```
+
+
+```{r}
+read_tsv("/CIFS/MUG01_N/deckerje/tnr343/local_adaptation_genotypes/red_angus/190402_RAN/phenotypes/190402_RAN_gpsm.purebred.txt") %>% 
+  ggplot(aes(X1))+
+  geom_density()
+
+read_tsv("/CIFS/MUG01_N/deckerje/tnr343/local_adaptation_genotypes/red_angus/190402_RAN/phenotypes/190402_RAN_gpsm.purebred.txt") %>% 
+  mutate(X1 = log(X1)) %>% 
+  ggplot(aes(X1))+
+  geom_density()
+
+read_tsv("/CIFS/MUG01_N/deckerje/tnr343/local_adaptation_genotypes/red_angus/190402_RAN/phenotypes/190402_RAN_gpsm.purebred.txt", col_names = FALSE) %>% 
+  mutate(X1 = log(X1)) %>% 
+  write_tsv("/CIFS/MUG01_N/deckerje/tnr343/local_adaptation_genotypes/red_angus/190402_RAN/phenotypes/190402_RAN_gpsm.purebred.ln_transformed.txt", col_names = FALSE)
+
+
+
+even_20gen = data.frame(gen = 1:20, keepind = 500)
+even_10gen = data.frame(gen = 1:10, keepind = 1000)
+even_5gen = data.frame(gen = 1:5, keepind = 2000)
+uneven_20gen = data.frame(gen = 1:20, keepind = c(12, 16, 16, 20, 24, 39, 43, 77, 105, 146, 160, 253, 350, 450, 652, 881, 1200, 1670, 2408, 1478))
+uneven_10gen = data.frame(gen = 1:10, keepind = c(14, 25, 27, 76, 190, 423, 819, 1696, 3604, 3126))
+uneven_5gen = data.frame(gen = 1:5, keepind = c(48, 144, 560, 1919, 7329))
+
+x = "10"
+dataframes = case_when(x == "5" ~ list(even_5gen, uneven_5gen),
+                       x == "10" ~ list(even_10gen, uneven_10gen),
+                       x == "20" ~ list(even_20gen, uneven_20gen))
+
+sampler_even = dataframes[[2]]
+
+dataframes[[2]][3,]$keepind
+
+```
+
